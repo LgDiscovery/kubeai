@@ -13,6 +13,12 @@ type Config struct {
 	ModelManager ModelManagerConfig
 	K8s          K8sConfig
 	Metrics      MetricsConfig
+	Scheduler    SchedulerConfig
+	ResourceSync ResourceSyncConfig
+}
+
+type ResourceSyncConfig struct {
+	Interval time.Duration
 }
 
 type RedisConfig struct {
@@ -24,8 +30,9 @@ type RedisConfig struct {
 }
 
 type StreamsConfig struct {
-	Inference string
-	Training  string
+	Inference  string
+	Training   string
+	DeadLetter string
 }
 
 type ModelManagerConfig struct {
@@ -40,4 +47,10 @@ type K8sConfig struct {
 type MetricsConfig struct {
 	Enabled bool
 	Path    string
+}
+
+type SchedulerConfig struct {
+	Algorithm        string
+	EnableGPUPacking bool
+	GPUBinpackWeight float64
 }

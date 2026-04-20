@@ -33,11 +33,6 @@ K8s:
   InferenceJobImage: "tensorflow/serving:2.15.0"
   TrainingJobImage: "kubeflow/training-operator:v1"
 
-Scheduler:
-  Algorithm: "binpack"
-  EnableGPUPacking: true
-  GPUBinpackWeight: 0.7
-
 ResourceSync:
   Interval: 10s
 

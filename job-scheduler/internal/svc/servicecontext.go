@@ -15,7 +15,6 @@ import (
 	"kubeai-job-scheduler/internal/config"
 	"kubeai-job-scheduler/internal/middleware"
 	"kubeai-job-scheduler/internal/queue"
-	"kubeai-job-scheduler/internal/scheduler"
 )
 
 type ServiceContext struct {
@@ -27,9 +26,6 @@ type ServiceContext struct {
 	K8sConfig              *k8sRest.Config
 	InferenceQueue         *queue.TaskQueue
 	TrainingQueue          *queue.TaskQueue
-	ResourceTracker        *scheduler.ResourceTracker
-	PlacementStrategy      scheduler.PlacementStrategy
-	DeadLetterQueue        *queue.DeadLetterQueue
 	MetricsMiddleware      rest.Middleware
 }
 
@@ -64,19 +60,6 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	// Queues
 	inferenceQueue := queue.NewTaskQueue(rdb, c.Redis.Streams.Inference, c.Redis.ConsumerGroup)
 	trainingQueue := queue.NewTaskQueue(rdb, c.Redis.Streams.Training, c.Redis.ConsumerGroup)
-	deadLetterQueue := queue.NewDeadLetterQueue(rdb, c.Redis.Streams.Inference, c.Redis.ConsumerGroup)
-
-	// Resource Tracker
-	resourceTracker := scheduler.NewResourceTracker(k8sClient, c.K8s.Namespace, c.ResourceSync.Interval)
-
-	// Placement Strategy
-	var strategy scheduler.PlacementStrategy
-	switch c.Scheduler.Algorithm {
-	case "spread":
-		strategy = scheduler.NewSpreadStrategy()
-	default:
-		strategy = scheduler.NewBinpackStrategy(c.Scheduler.EnableGPUPacking, c.Scheduler.GPUBinpackWeight)
-	}
 
 	return &ServiceContext{
 		Config:                 c,
@@ -87,9 +70,6 @@ func NewServiceContext(c config.Config) *ServiceContext {
 		K8sConfig:              k8sConfig,
 		InferenceQueue:         inferenceQueue,
 		TrainingQueue:          trainingQueue,
-		ResourceTracker:        resourceTracker,
-		PlacementStrategy:      strategy,
-		DeadLetterQueue:        deadLetterQueue,
 		MetricsMiddleware:      middleware.NewMetricsMiddleware().Handle,
 	}
 }

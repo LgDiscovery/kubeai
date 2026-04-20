@@ -14,6 +14,7 @@ Redis:
   Streams:
     Inference: "kubeai:inference:tasks"
     Training: "kubeai:training:tasks"
+    DeadLetter: "kubeai:deadLetter:tasks"
   ConsumerGroup: "inference-gateway"
 
 ModelManager:
@@ -22,6 +23,16 @@ ModelManager:
 
 K8s:
   Namespace: "kubeai"
+  InferenceJobImage: "tensorflow/serving:2.15.0"
+  TrainingJobImage: "kubeflow/training-operator:v1"
+
+Scheduler:
+  Algorithm: "binpack"
+  EnableGPUPacking: true
+  GPUBinpackWeight: 0.7
+
+ResourceSync:
+  Interval: 10s
 
 Log:
   ServiceName: inference-gateway

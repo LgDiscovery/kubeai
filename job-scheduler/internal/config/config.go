@@ -16,7 +16,6 @@ type Config struct {
 	ModelManager     ModelManagerConfing
 	InferenceGateway InferenceGatewayConfing
 	K8s              K8sConfing
-	Scheduler        SchedulerConfig
 	ResourceSync     ResourceSyncConfing
 	Log              LogConfing
 	Metrics          MetricsConfing
@@ -68,10 +67,4 @@ type LogConfing struct {
 type MetricsConfing struct {
 	Enabled  bool
 	Interval time.Duration
-}
-
-type SchedulerConfig struct {
-	Algorithm        string
-	EnableGPUPacking bool
-	GPUBinpackWeight float64
 }

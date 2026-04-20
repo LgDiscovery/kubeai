@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"github.com/zeromicro/go-zero/core/discov"
 	"github.com/zeromicro/go-zero/core/logx"
-	"k8s.io/apimachinery/pkg/runtime"
 	"os"
 	"os/signal"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -21,26 +20,11 @@ import (
 
 	"github.com/zeromicro/go-zero/core/conf"
 	"github.com/zeromicro/go-zero/rest"
-	fiv1 "kubeai-inference-gateway/inferenceservice/api/v1"
-	logic "kubeai-inference-gateway/internal/logic/inference"
-	tiv1 "kubeai-inference-gateway/trainingjob/api/v1"
-
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	controllers "kubeai-inference-gateway/internal/controllers"
+	logic "kubeai-inference-gateway/internal/logic/inference"
 )
 
-var (
-	scheme     = runtime.NewScheme()
-	configFile = flag.String("f", "etc/inference-gateway.yaml", "the config file")
-)
-
-func init() {
-	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(fiv1.AddToScheme(scheme))
-	utilruntime.Must(tiv1.AddToScheme(scheme))
-	// +kubebuilder:scaffold:scheme
-}
+var configFile = flag.String("f", "etc/inference-gateway.yaml", "the config file")
 
 func main() {
 	flag.Parse()
