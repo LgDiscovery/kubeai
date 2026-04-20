@@ -1,0 +1,52 @@
+Name: job-scheduler
+Host: 0.0.0.0
+Port: 58081
+
+Etcd:
+  Hosts:
+    - "etcd.kubeai.svc.cluster.local:2379"
+  Key: "kubeai.services.job-scheduler"
+
+Redis:
+  Addr: "redis.kubeai.svc.cluster.local:6379"
+  Password: "redis"
+  DB: 0
+  Streams:
+    Inference: "kubeai:inference:tasks"
+    Training: "kubeai:training:tasks"
+  ConsumerGroup: "kubeai-scheduler"
+  MaxRetries: 3
+  Expiration: 24h
+  RetryBackoff: 1000 #ms
+
+ModelManager:
+  URL: "http://model-manager.kubeai.svc.cluster.local:58080"
+  Timeout: 5s
+
+# 推理网关
+InferenceGateway:
+  URL: "http://inference-gateway.kubeai.svc.cluster.local:58082"
+  Timeout: 5s
+
+K8s:
+  Namespace: "kubeai"
+  InferenceJobImage: "tensorflow/serving:2.15.0"
+  TrainingJobImage: "kubeflow/training-operator:v1"
+
+Scheduler:
+  Algorithm: "binpack"
+  EnableGPUPacking: true
+  GPUBinpackWeight: 0.7
+
+ResourceSync:
+  Interval: 10s
+
+Log:
+  ServiceName: job-scheduler
+  Mode: console
+  Level: info
+  Encoding: json
+
+Metrics:
+  Enabled: true
+  Path: "/metrics"

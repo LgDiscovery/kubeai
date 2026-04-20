@@ -1,0 +1,34 @@
+Name: inference-gateway
+Host: 0.0.0.0
+Port: 58082
+
+Etcd:
+  Hosts:
+    - "etcd.kubeai.svc.cluster.local:2379"
+  Key: "kubeai.services.inference-gateway"
+
+Redis:
+  Addr: "redis.kubeai.svc.cluster.local:6379"
+  Password: "redis123"
+  DB: 0
+  Streams:
+    Inference: "kubeai:inference:tasks"
+    Training: "kubeai:training:tasks"
+  ConsumerGroup: "inference-gateway"
+
+ModelManager:
+  URL: "http://model-manager.kubeai.svc.cluster.local:58080"
+  Timeout: 5s
+
+K8s:
+  Namespace: "kubeai"
+
+Log:
+  ServiceName: inference-gateway
+  Mode: console
+  Level: info
+  Encoding: json
+
+Metrics:
+  Enabled: true
+  Path: "/metrics"

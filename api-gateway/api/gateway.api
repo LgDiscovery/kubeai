@@ -1,0 +1,129 @@
+syntax = "v1"
+
+info (
+	title:   "KubeAI API Gateway"
+	desc:    "元原生AI推理平台统一网关"
+	author:  "KubeAI liu.guang"
+	version: "v1.0.0"
+)
+
+// 全局配置
+type (
+	// 登录请求
+	LoginRequest {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	// 登录响应
+	LoginResponse {
+		Token    string `json:"token"`
+		UserID   uint   `json:"user_id"`
+		Username string `json:"username"`
+		Role     string `json:"role"`
+	}
+	// 注册请求
+	RegisterRequest {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	// 注册响应
+	RegisterResponse {
+		Message string `json:"message"`
+		UserID  uint   `json:"user_id"`
+	}
+	// 通用响应
+	GeneralResponse {
+		Code    int         `json:"code"`
+		Message string      `json:"message"`
+		Data    interface{} `json:"data"`
+	}
+	// 用户相关
+	User {
+		ID        uint   `json:"id"`
+		Username  string `json:"username"`
+		Password  string `json:"password"`
+		Role      string `json:"role"`
+		CreatedAt string `json:"created_at"`
+		UpdatedAt string `json:"updated_at"`
+	}
+)
+
+// 公开服务（无需鉴权）
+@server (
+	prefix:     "/api/v1/auth"
+	group:      "auth"
+	middleware: MetricsMiddleware,CorsMiddleware // 仅指标采集，CORS 支持跨域请求
+)
+service gateway {
+	// 登录
+	@doc (
+		title: "登录"
+		desc:  "用户登录"
+	)
+	@handler LoginHandler
+	post /login (LoginRequest) returns (LoginResponse)
+
+	// 注册
+	@doc (
+		title: "注册"
+		desc:  "用户注册"
+	)
+	@handler RegisterHandler
+	post /register (RegisterRequest) returns (RegisterResponse)
+}
+
+// 需鉴权的业务服务（模型管理、任务调度、推理）
+// 通过中间件 AuthMiddleware 进行 JWT 校验
+@server (
+	prefix:     "/api/v1"
+	group:      "business"
+	middleware: AuthMiddleware,MetricsMiddleware,RateLimitMiddleware,CorsMiddleware
+)
+service gateway {
+	// 模型管理
+	@doc (
+		title: "模型管理"
+		desc:  "模型管理接口"
+	)
+	@handler ProxyModelHandler
+	post /models/:any
+
+	// 任务调度
+	@doc (
+		title: "任务调度"
+		desc:  "任务调度接口"
+	)
+	@handler ProxyJobHandler
+	post /jobs/:any
+
+	// 推理服务
+	@doc (
+		title: "推理服务"
+		desc:  "推理服务接口"
+	)
+	@handler ProxyInferenceHandler
+	post /inference/:any
+
+	// 可关测平台
+	@doc (
+		title: "可关测平台"
+		desc:  "可关测平台接口"
+	)
+	@handler ProxyObserverHandler
+	post /observer/:any
+}
+
+// 指标暴露（无需鉴权）
+@server (
+	prefix: /api/v1
+	group:  metrics
+)
+service gateway {
+	@doc (
+		title: "指标"
+		desc:  "指标暴露接口"
+	)
+	@handler MetricsHandler
+	get /metrics
+}
+

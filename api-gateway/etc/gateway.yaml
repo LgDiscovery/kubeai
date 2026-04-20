@@ -1,0 +1,79 @@
+Name: kubeai-gateway
+Host: 0.0.0.0
+Port: 8080
+Mode: dev
+
+# etcd 连接配置
+Etcd:
+  Hosts:
+    - "etcd.kubeai.svc.cluster.local:2379"
+  Key: "kubeai.gateway.config" # 网关配置键 用于热更新
+  User: ""
+  Pass: ""
+  CertFile: ""
+  CertKeyFile: ""
+  CACertFile: ""
+  InsecureSkipVerify: false
+  DialTimeout: 15s
+
+# 服务发现配置（上游服务在 etcd 中的注册前缀）
+Discovery:
+  ModelManagerKey: "kubeai.services.model-manager"    # 对应服务注册键
+  TaskSchedulerKey: "kubeai.services.task-scheduler"
+  InferenceGatewayKey: "kubeai.services.inference-gateway"
+  ObservabilityGatewayKey: "kubeai.services.observability-gateway"
+
+
+# 以下配置可通过 etcd 热更新覆盖
+
+# 数据库配置
+Database:
+  Host: "postgres.kubeai.svc.cluster.local"
+  Port: 5432
+  User: "postgres"
+  Password: "postgres"
+  DBName: "kubeai_platform"
+  SSLMode: "disable"
+  MaxIdleConns: 10
+  MaxOpenConns: 100
+
+# 日志
+Log:
+  ServiceName: kubeai-gateway
+  Mode: console
+  Level: info
+  Encoding: json
+
+# JWT鉴权
+Auth:
+  AccessSecret: kubeai-platform-2024-secret
+  AccessExpire: 604800 # 7天
+  
+# Redis配置（分布式限流必须）
+Redis:
+  Host: 127.0.0.1
+  Port: 6379
+  Pass: "redis"
+  Db: 0
+# 限流配置
+RateLimit:
+  Enabled: true
+  Rate: 100       # 60秒内最大100次请求
+  Interval: 60    # 时间窗口，单位：秒
+  KeyPrefix: "kubeai:gateway:ratelimit:" # Redis key前缀
+  
+# 下游服务路由
+Upstreams:
+  ModelManager:
+    URL: http://model-manager.kubeai.svc.cluster.local:58080
+  JobScheduler:
+    URL: http://job-scheduler.kubeai.svc.cluster.local:58081
+  InferenceGateway:
+    URL: http://inference-gateway.kubeai.svc.cluster.local:58082
+  ObservabilityGateway:
+    URL: http://observability-gateway.kubeai.svc.cluster.local:58083
+
+# Prometheus 指标
+Metrics:
+  Enabled: true
+  Path: /metrics

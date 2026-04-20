@@ -1,0 +1,157 @@
+syntax = "v1"
+
+info (
+	title:   "KubeAI 模型管理中心"
+	desc:    "模型注册、版本管理、生命周期管控"
+	author:  "KubeAI liu.guang"
+	version: "v1.0.0"
+)
+
+type (
+	// 模型相关
+	Model {
+		ID          uint           `json:"id"`
+		Name        string         `json:"name"`
+		Description string         `json:"description,optional"`
+		Framework   string         `json:"framework,optional"`
+		TaskType    string         `json:"task_type,optional"`
+		Owner       string         `json:"owner,optional"`
+		Labels      string         `json:"labels,optional"`
+		CreatedAt   string         `json:"created_at"`
+		UpdatedAt   string         `json:"updated_at"`
+		Versions    []ModelVersion `json:"versions,optional"`
+	}
+	CreateModelReq {
+		Name        string `form:"name"`
+		Description string `form:"description,optional"`
+		Framework   string `form:"framework,optional"`
+		TaskType    string `form:"task_type,optional"`
+		Labels      string `form:"labels,optional"`
+		Owner       string `form:"owner,optional"`
+	}
+	UpdateModelReq {
+		Name        string `form:"name"`
+		Description string `form:"description,optional"`
+		Labels      string `form:"labels,optional"`
+	}
+	ModelListReq {
+		Page      int    `form:"page,default=1"`
+		PageSize  int    `form:"page_size,default=20"`
+		Framework string `form:"framework,optional"`
+		TaskType  string `form:"task_type,optional"`
+	}
+	ModelListResp {
+		Items    []Model `json:"items"`
+		Total    int64   `json:"total"`
+		Page     int     `json:"page"`
+		PageSize int     `json:"page_size"`
+	}
+	// 版本相关
+	ModelVersion {
+		ID           uint   `json:"id"`
+		ModelID      uint   `json:"model_id"`
+		Version      string `json:"version"`
+		Description  string `json:"description,optional"`
+		StoragePath  string `json:"storage_path"`
+		Framework    string `json:"framework,optional"`
+		FrameworkVer string `json:"framework_version,optional"`
+		Metrics      string `json:"metrics,optional"`
+		Parameters   string `json:"parameters,optional"`
+		Size         int64  `json:"size"`
+		Checksum     string `json:"checksum"`
+		Status       string `json:"status"`
+		CreatedAt    string `json:"created_at"`
+		UpdatedAt    string `json:"updated_at"`
+	}
+	ModelVersionListResp {
+		Items []ModelVersion `json:"items"`
+	}
+	CreateVersionReq {
+		Name             string `form:"name"`
+		Version          string `form:"version"`
+		Description      string `form:"description,optional"`
+		Framework        string `form:"framework,optional"`
+		FrameworkVersion string `form:"framework_version,optional"`
+		Metrics          string `form:"metrics,optional"`
+		Parameters       string `form:"parameters,optional"`
+	}
+	UpdateVersionStatusReq {
+		Name    string `form:"name"`
+		Version string `form:"version"`
+		Status  string `form:"status"`
+	}
+	DownloadResp {
+		StoragePath string `json:"storage_path"`
+	}
+	// 通用请求
+	CommonReq {
+		Name      string `path:"name"`
+		Version   string `path:"version"`
+		Presigned bool   `form:"presigned,default=false"`
+	}
+	// 通用响应
+	CommonResp {
+		Code    int         `json:"code"`
+		Message string      `json:"message"`
+		Data    interface{} `json:"data,optional"`
+	}
+)
+
+@server (
+	prefix:     /api/v1
+	group:      model
+	middleware: MetricsMiddleware
+)
+service model_manager {
+	// 模型管理
+	@handler CreateModelHandler
+	post /models (CreateModelReq) returns (Model)
+
+	@handler ListModelsHandler
+	get /models (ModelListReq) returns (ModelListResp)
+
+	@handler GetModelHandler
+	get /models/:name (CommonReq) returns (Model)
+
+	@handler UpdateModelHandler
+	put /models/:name (UpdateModelReq) returns (Model)
+
+	@handler DeleteModelHandler
+	delete /models/:name (CommonReq) returns (CommonResp)
+
+	// 版本管理
+	@handler CreateVersionHandler
+	post /models/:name/versions (CreateVersionReq) returns (ModelVersion)
+
+	@handler ListVersionsHandler
+	get /models/:name/versions (CommonReq) returns (ModelVersionListResp)
+
+	@handler GetVersionHandler
+	get /models/:name/versions/:version (CommonReq) returns (ModelVersion)
+
+	@handler DownloadVersionHandler
+	get /models/:name/versions/:version/download (CommonReq) returns (DownloadResp)
+
+	@handler UpdateVersionStatusHandler
+	patch /models/:name/versions/:version/status (UpdateVersionStatusReq) returns (CommonResp)
+
+	@handler DeleteVersionHandler
+	delete /models/:name/versions/:version (CommonReq) returns (CommonResp)
+}
+
+// 健康检查与指标
+@server (
+	prefix: /api/v1/models
+	group:  health
+)
+service model_manager {
+	@handler HealthHandler
+	get /health returns (CommonResp)
+
+	@handler ReadyHandler
+	get /ready returns (CommonResp)
+
+	@handler MetricsHandler
+	get /metrics returns (CommonResp)
+}
+
