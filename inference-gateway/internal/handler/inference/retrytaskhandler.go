@@ -1,26 +1,26 @@
 // Code scaffolded by goctl. Safe to edit.
 // goctl 1.10.1
 
-package job_scheduler
+package inference
 
 import (
-	"kubeai-job-scheduler/internal/types"
+	"kubeai-inference-gateway/internal/logic/inference"
+	"kubeai-inference-gateway/internal/types"
 	"net/http"
 
 	"github.com/zeromicro/go-zero/rest/httpx"
-	"kubeai-job-scheduler/internal/logic/job_scheduler"
-	"kubeai-job-scheduler/internal/svc"
+	"kubeai-inference-gateway/internal/svc"
 )
 
-func ResumeTaskHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
+func RetryTaskHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var req types.TaskControlReq
+		var req types.ControlReq
 		if err := httpx.Parse(r, &req); err != nil {
 			httpx.ErrorCtx(r.Context(), w, err)
 			return
 		}
-		l := job_scheduler.NewResumeTaskLogic(r.Context(), svcCtx)
-		resp, err := l.ResumeTask(&req)
+		l := inference.NewRetryTaskLogic(r.Context(), svcCtx)
+		resp, err := l.RetryTask(&req)
 		if err != nil {
 			httpx.ErrorCtx(r.Context(), w, err)
 		} else {

@@ -50,26 +50,6 @@ func RegisterHandlers(server *rest.Server, serverCtx *svc.ServiceContext) {
 					Handler: job_scheduler.GetInferenceTaskHandler(serverCtx),
 				},
 				{
-					Method:  http.MethodPost,
-					Path:    "/tasks/:task_id/cancel/:task_type",
-					Handler: job_scheduler.CancelTaskHandler(serverCtx),
-				},
-				{
-					Method:  http.MethodPost,
-					Path:    "/tasks/:task_id/pause/:task_type",
-					Handler: job_scheduler.PauseTaskHandler(serverCtx),
-				},
-				{
-					Method:  http.MethodPost,
-					Path:    "/tasks/:task_id/resume/:task_type",
-					Handler: job_scheduler.ResumeTaskHandler(serverCtx),
-				},
-				{
-					Method:  http.MethodPost,
-					Path:    "/tasks/:task_id/retry/:task_type",
-					Handler: job_scheduler.RetryTaskHandler(serverCtx),
-				},
-				{
 					Method:  http.MethodGet,
 					Path:    "/tasks/list",
 					Handler: job_scheduler.ListTasksHandler(serverCtx),

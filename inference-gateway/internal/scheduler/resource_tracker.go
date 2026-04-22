@@ -152,9 +152,11 @@ func getGPUCount(rl corev1.ResourceList) int64 {
 
 // ResourceRequest 内部使用的资源需求（统一单位）
 type ResourceRequest struct {
-	CPUMilli    int64
-	MemoryBytes int64
-	GPUCount    int64
+	CPUMilli     int64
+	MemoryBytes  int64
+	GPUCount     int64
+	ModelName    string // 用于亲和性调度
+	ModelVersion string
 }
 
 var ErrInsufficientResource = fmt.Errorf("insufficient resources in cluster")

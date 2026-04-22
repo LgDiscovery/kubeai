@@ -18,12 +18,13 @@ import (
 )
 
 type ConsumerLogic struct {
-	ctx    context.Context
-	svcCtx *svc.ServiceContext
+	ctx       context.Context
+	svcCtx    *svc.ServiceContext
+	streamKey string
 }
 
-func NewConsumerLogic(ctx context.Context, svcCtx *svc.ServiceContext) *ConsumerLogic {
-	return &ConsumerLogic{ctx: ctx, svcCtx: svcCtx}
+func NewConsumerLogic(ctx context.Context, svcCtx *svc.ServiceContext, streamKey string) *ConsumerLogic {
+	return &ConsumerLogic{ctx: ctx, svcCtx: svcCtx, streamKey: streamKey}
 }
 
 // ProcessInferenceTask 处理推理任务：创建 InferenceService CRD
@@ -57,6 +58,7 @@ func (l *ConsumerLogic) ProcessInferenceTask(taskID string, data []byte) error {
 		return fmt.Errorf("find fit node failed, %v", err)
 	}
 	task.ScheduledNode = nodeName
+	task.PodName = fmt.Sprintf("%s-%s", task.ModelName, task.ModelVersion)
 
 	// 3构建 InferenceService 对象
 	isvc := &aiv1.InferenceService{
@@ -87,7 +89,12 @@ func (l *ConsumerLogic) ProcessInferenceTask(taskID string, data []byte) error {
 	}
 	task.Status = model.StatusRunning
 	task.UpdatedAt = time.Now()
+
 	logx.Infof("Created InferenceService %s", isvcName)
+	if err := l.svcCtx.InferenceTaskRepo.Update(l.ctx, task); err != nil {
+		return fmt.Errorf("update inference task failed, %v", err)
+	}
+
 	return l.saveInferenceTaskState(task)
 }
 
@@ -111,12 +118,16 @@ func (l *ConsumerLogic) handleInferenceTaskFailure(task *model.InferenceTask, er
 			return fmt.Errorf("inference task push failed, %v", err)
 		}
 	}
+	task.UpdatedAt = time.Now()
+	if err := l.svcCtx.InferenceTaskRepo.Update(l.ctx, task); err != nil {
+		return fmt.Errorf("update inference task failed, %v", err)
+	}
 	// 持久化状态...
 	return l.saveInferenceTaskState(task)
 }
 
 func (l *ConsumerLogic) saveInferenceTaskState(task *model.InferenceTask) error {
-	key := fmt.Sprintf("kubeai:task:inference:%s", task.TaskID)
+	key := fmt.Sprintf("%s:%s", l.streamKey, task.TaskID)
 	data, err := task.Marshal()
 	if err != nil {
 		return fmt.Errorf("marshal inference task failed, %v", err)
@@ -132,7 +143,7 @@ func (l *ConsumerLogic) ProcessTrainingTask(taskID string, data []byte) error {
 	}
 	logx.Infof("Processing training task %s", task.TaskID)
 
-	jobName := fmt.Sprintf("train-%s", task.TaskID)
+	jobName := fmt.Sprintf("%s-%s-dist", task.TaskID)
 
 	// 检查是否已存在 TrainingJob
 	gvr := schema.GroupVersionResource{
@@ -177,14 +188,17 @@ func (l *ConsumerLogic) ProcessTrainingTask(taskID string, data []byte) error {
 			BackoffLimit: 3,
 		},
 	}
-
 	if err := l.svcCtx.CtrlClient.Create(l.ctx, trainingJob); err != nil {
 		logx.Errorf("Failed to create TrainingJob: %v", err)
 		return l.handleTrainingTaskFailure(task, err)
 	}
+	task.PodName = jobName
 	task.Status = model.StatusRunning
 	task.UpdatedAt = time.Now()
 	logx.Infof("Created TrainingJob %s", jobName)
+	if err := l.svcCtx.TrainingTaskRepo.Update(l.ctx, task); err != nil {
+		return fmt.Errorf("update training task failed, %v", err)
+	}
 	return l.saveTrainingTaskState(task)
 }
 
@@ -208,11 +222,15 @@ func (l *ConsumerLogic) handleTrainingTaskFailure(task *model.TrainingTask, err 
 			return fmt.Errorf("training task push failed, %v", err)
 		}
 	}
+	task.UpdatedAt = time.Now()
+	if err := l.svcCtx.TrainingTaskRepo.Update(l.ctx, task); err != nil {
+		return fmt.Errorf("update training task failed, %v", err)
+	}
 	return l.saveTrainingTaskState(task)
 }
 
 func (l *ConsumerLogic) saveTrainingTaskState(task *model.TrainingTask) error {
-	key := fmt.Sprintf("kubeai:task:training:%s", task.TaskID)
+	key := fmt.Sprintf("%s:%s", l.streamKey, task.TaskID)
 	data, err := task.Marshal()
 	if err != nil {
 		return fmt.Errorf("marshal training task failed, %v", err)

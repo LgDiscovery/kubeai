@@ -94,7 +94,7 @@ func main() {
 }
 
 func startInferenceConsumer(ctx *svc.ServiceContext) {
-	consumerLogic := logic.NewConsumerLogic(context.Background(), ctx)
+	consumerLogic := logic.NewConsumerLogic(context.Background(), ctx, ctx.Config.Redis.Streams.Inference)
 	ctx.InferenceQueue.Consume(context.Background(), "inference-consumer",
 		func(taskID string, data []byte) error {
 			return consumerLogic.ProcessInferenceTask(taskID, data)
@@ -102,7 +102,7 @@ func startInferenceConsumer(ctx *svc.ServiceContext) {
 }
 
 func startTrainingConsumer(ctx *svc.ServiceContext) {
-	consumerLogic := logic.NewConsumerLogic(context.Background(), ctx)
+	consumerLogic := logic.NewConsumerLogic(context.Background(), ctx, ctx.Config.Redis.Streams.Training)
 	ctx.TrainingQueue.Consume(context.Background(), "training-consumer",
 		func(taskID string, data []byte) error {
 			return consumerLogic.ProcessTrainingTask(taskID, data)

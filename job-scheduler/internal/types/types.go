@@ -9,6 +9,11 @@ type CommonResp struct {
 	Data    interface{} `json:"data,optional"`
 }
 
+type EnvVar struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
 type GetInferenceTaskReq struct {
 	TaskID string `json:"task_id"`
 }
@@ -75,18 +80,17 @@ type SubmitTrainingReq struct {
 	Name        string          `json:"name"`
 	ModelName   string          `json:"model_name,optional"`
 	Framework   string          `json:"framework"`
+	Image       string          `json:"image"`
 	Command     []string        `json:"command"`
 	Args        []string        `json:"args"`
 	Resources   ResourceRequest `json:"resources"`
+	Distributed bool            `json:"distributed,optional"`
+	WorkerNum   int32           `json:"worker_num,optional"`
+	Env         []EnvVar        `json:"env,optional"`
 	DatasetPath string          `json:"dataset_path,optional"`
 	OutputPath  string          `json:"output_path,optional"`
-	Priority    int             `json:"priority"`
-	MaxRetries  int             `json:"max_retries"`
-}
-
-type TaskControlReq struct {
-	TaskID   string `json:"task_id"`
-	TaskType string `json:"task_type"` // inference/training
+	Priority    int             `json:"priority,default=5"`
+	MaxRetries  int             `json:"max_retries,default=3"`
 }
 
 type TrainingTask struct {
@@ -113,9 +117,4 @@ type TrainingTaskResp struct {
 	TaskID  string `json:"task_id"`
 	Status  string `json:"status"`
 	Message string `json:"message"`
-}
-
-type UpdateTrainingTaskReq struct {
-	TaskID string `json:"task_id"`
-	Status string `json:"status"` // paused/cancelled/resumed
 }

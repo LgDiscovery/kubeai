@@ -11,14 +11,14 @@ import (
 
 type Config struct {
 	rest.RestConf
-	Etcd             discov.EtcdConf `json:",optional"`
-	Redis            RedisConfig
-	ModelManager     ModelManagerConfing
-	InferenceGateway InferenceGatewayConfing
-	K8s              K8sConfing
-	ResourceSync     ResourceSyncConfing
-	Log              LogConfing
-	Metrics          MetricsConfing
+	Etcd         discov.EtcdConf `json:",optional"`
+	Redis        RedisConfig
+	ModelManager ModelManagerConfing
+	K8s          K8sConfing
+	ResourceSync ResourceSyncConfing
+	Log          LogConfing
+	Metrics      MetricsConfing
+	Database     DatabaseConfig
 }
 
 type RedisConfig struct {
@@ -42,15 +42,21 @@ type ModelManagerConfing struct {
 	Timeout time.Duration
 }
 
-type InferenceGatewayConfing struct {
-	URL     string
-	Timeout time.Duration
-}
-
 type K8sConfing struct {
 	Namespace         string
 	InferenceJobImage string
 	TrainingJobImage  string
+}
+
+type DatabaseConfig struct {
+	Host         string
+	Port         int
+	User         string
+	Password     string
+	DBName       string
+	SSLMode      string
+	MaxIdleConns int `json:",default=10"`
+	MaxOpenConns int `json:",default=100"`
 }
 
 type ResourceSyncConfing struct {

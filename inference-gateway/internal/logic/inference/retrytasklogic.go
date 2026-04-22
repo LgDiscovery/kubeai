@@ -1,16 +1,16 @@
 // Code scaffolded by goctl. Safe to edit.
 // goctl 1.10.1
 
-package job_scheduler
+package inference
 
 import (
 	"context"
 	"fmt"
-	"kubeai-job-scheduler/internal/model"
+	"kubeai-inference-gateway/internal/model"
 	"time"
 
-	"kubeai-job-scheduler/internal/svc"
-	"kubeai-job-scheduler/internal/types"
+	"kubeai-inference-gateway/internal/svc"
+	"kubeai-inference-gateway/internal/types"
 
 	"github.com/zeromicro/go-zero/core/logx"
 )
@@ -29,7 +29,7 @@ func NewRetryTaskLogic(ctx context.Context, svcCtx *svc.ServiceContext) *RetryTa
 	}
 }
 
-func (l *RetryTaskLogic) RetryTask(req *types.TaskControlReq) (resp *types.CommonResp, err error) {
+func (l *RetryTaskLogic) RetryTask(req *types.ControlReq) (resp *types.CommonResp, err error) {
 	var key string
 	if req.TaskType == "inference" {
 		key = fmt.Sprintf("%s:%s", l.svcCtx.Config.Redis.Streams.Inference, req.TaskID)

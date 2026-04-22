@@ -1,6 +1,6 @@
 package resources
 
-import aiv1 "inference-gateway/api/v1"
+import aiv1 "kubeai-inference-gateway/inferenceservice/api/v1"
 
 // 默认配置常量
 const (

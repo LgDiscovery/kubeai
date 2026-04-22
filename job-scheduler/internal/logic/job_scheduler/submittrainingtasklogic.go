@@ -18,27 +18,42 @@ import (
 
 type SubmitTrainingTaskLogic struct {
 	logx.Logger
-	ctx    context.Context
-	svcCtx *svc.ServiceContext
+	ctx       context.Context
+	svcCtx    *svc.ServiceContext
+	streamKey string
 }
 
 func NewSubmitTrainingTaskLogic(ctx context.Context, svcCtx *svc.ServiceContext) *SubmitTrainingTaskLogic {
 	return &SubmitTrainingTaskLogic{
-		Logger: logx.WithContext(ctx),
-		ctx:    ctx,
-		svcCtx: svcCtx,
+		Logger:    logx.WithContext(ctx),
+		ctx:       ctx,
+		svcCtx:    svcCtx,
+		streamKey: svcCtx.Config.Redis.Streams.Training,
 	}
 }
 
 func (l *SubmitTrainingTaskLogic) SubmitTraining(req *types.SubmitTrainingReq) (resp *types.TrainingTaskResp, err error) {
+	var env []model.EnvVar
+	if req.Env != nil {
+		for _, v := range req.Env {
+			env = append(env, model.EnvVar{
+				Name:  v.Name,
+				Value: v.Value,
+			})
+		}
+	}
 	task := &model.TrainingTask{
 		TaskID:      "train-" + uuid.New().String()[:8],
 		Name:        req.Name,
 		ModelName:   req.ModelName,
 		Framework:   req.Framework,
+		Image:       req.Image,
 		Command:     req.Command,
 		Args:        req.Args,
 		Resources:   model.ResourceRequest(req.Resources),
+		Distributed: req.Distributed,
+		WorkerNum:   req.WorkerNum,
+		Env:         env,
 		DatasetPath: req.DatasetPath,
 		OutputPath:  req.OutputPath,
 		Status:      model.StatusPending,
@@ -51,21 +66,14 @@ func (l *SubmitTrainingTaskLogic) SubmitTraining(req *types.SubmitTrainingReq) (
 	if err := l.svcCtx.TrainingQueue.Push(l.ctx, task.TaskID, data, task.Priority); err != nil {
 		return nil, err
 	}
-	if err := l.saveTrainingTaskState(task); err != nil {
-		return nil, fmt.Errorf("save training task state failed, %v", err)
+
+	// 保存任务到数据库
+	if err := l.svcCtx.TrainingTaskRepo.Create(l.ctx, task); err != nil {
+		return nil, fmt.Errorf("save training task failed, %v", err)
 	}
 	return &types.TrainingTaskResp{
 		TaskID:  task.TaskID,
 		Status:  string(model.StatusPending),
 		Message: "training task submitted successfully",
 	}, nil
-}
-
-func (l *SubmitTrainingTaskLogic) saveTrainingTaskState(task *model.TrainingTask) error {
-	key := fmt.Sprintf("kubeai:task:training:%s", task.TaskID)
-	data, err := task.Marshal()
-	if err != nil {
-		return fmt.Errorf("marshal training task failed, %v", err)
-	}
-	return l.svcCtx.RedisClient.Set(l.ctx, key, data, 24*time.Hour).Err()
 }

@@ -2,7 +2,7 @@ syntax = "v1"
 
 info (
 	title:   "KubeAI 任务调度中心"
-	desc:    "推理/训练任务统一调度，资源匹配，队列管理，生命周期控制"
+	desc:    "推理/训练任务统一下发队列，任务管理"
 	author:  "KubeAI liu.guang"
 	version: "v1.0.0"
 )
@@ -73,13 +73,17 @@ type (
 		Name        string          `json:"name"`
 		ModelName   string          `json:"model_name,optional"`
 		Framework   string          `json:"framework"`
+		Image       string          `json:"image"`
 		Command     []string        `json:"command"`
 		Args        []string        `json:"args"`
 		Resources   ResourceRequest `json:"resources"`
+		Distributed bool            `json:"distributed,optional"`
+		WorkerNum   int32           `json:"worker_num,optional"`
+		Env         []EnvVar        `json:"env,optional"`
 		DatasetPath string          `json:"dataset_path,optional"`
 		OutputPath  string          `json:"output_path,optional"`
-		Priority    int             `json:"priority"`
-		MaxRetries  int             `json:"max_retries"`
+		Priority    int             `json:"priority,default=5"`
+		MaxRetries  int             `json:"max_retries,default=3"`
 	}
 	TrainingTaskResp {
 		TaskID  string `json:"task_id"`
@@ -88,11 +92,6 @@ type (
 	}
 	GetTrainingTaskReq {
 		TaskID string `json:"task_id"`
-	}
-	// 任务管理
-	UpdateTrainingTaskReq {
-		TaskID string `json:"task_id"`
-		Status string `json:"status"` // paused/cancelled/resumed
 	}
 	ListTasksReq {
 		TaskType string `form:"task_type,options=inference|training"` // 推理或训练
@@ -112,10 +111,9 @@ type (
 		Message string      `json:"message"`
 		Data    interface{} `json:"data,optional"`
 	}
-	// 任务控制请求
-	TaskControlReq {
-		TaskID   string `json:"task_id"`
-		TaskType string `json:"task_type"` // inference/training
+	EnvVar {
+		Name  string `json:"name"`
+		Value string `json:"value"`
 	}
 )
 
@@ -142,19 +140,6 @@ service job_scheduler {
 	// 任务列表
 	@handler ListTasksHandler
 	get /tasks/list (ListTasksReq) returns (ListTasksResp)
-
-	// 任务控制
-	@handler PauseTaskHandler
-	post /tasks/:task_id/pause/:task_type (TaskControlReq) returns (CommonResp)
-
-	@handler ResumeTaskHandler
-	post /tasks/:task_id/resume/:task_type (TaskControlReq) returns (CommonResp)
-
-	@handler CancelTaskHandler
-	post /tasks/:task_id/cancel/:task_type (TaskControlReq) returns (CommonResp)
-
-	@handler RetryTaskHandler
-	post /tasks/:task_id/retry/:task_type (TaskControlReq) returns (CommonResp)
 }
 
 @server (

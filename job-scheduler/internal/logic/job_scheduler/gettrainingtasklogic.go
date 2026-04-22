@@ -5,6 +5,7 @@ package job_scheduler
 
 import (
 	"context"
+	"kubeai-job-scheduler/internal/model"
 
 	"kubeai-job-scheduler/internal/svc"
 	"kubeai-job-scheduler/internal/types"
@@ -26,8 +27,6 @@ func NewGetTrainingTaskLogic(ctx context.Context, svcCtx *svc.ServiceContext) *G
 	}
 }
 
-func (l *GetTrainingTaskLogic) GetTrainingTask(req *types.GetTrainingTaskReq) (resp *types.TrainingTask, err error) {
-	// todo: add your logic here and delete this line
-
-	return
+func (l *GetTrainingTaskLogic) GetTrainingTask(req *types.GetTrainingTaskReq) (resp *model.TrainingTask, err error) {
+	return l.svcCtx.TrainingTaskRepo.GetByTaskID(l.ctx, req.TaskID)
 }

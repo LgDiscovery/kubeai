@@ -10,7 +10,8 @@ type CommonResp struct {
 }
 
 type ControlReq struct {
-	TaskID string `json:"task_id"`
+	TaskID   string `json:"task_id"`
+	TaskType string `json:"task_type"` // inference/training
 }
 
 type EnvVar struct {
@@ -19,9 +20,10 @@ type EnvVar struct {
 }
 
 type InferenceRequest struct {
-	Model_name    string                 `json:"model_name"`
-	Model_version string                 `json:"model_version,optional"`
-	Input         map[string]interface{} `json:"input"`
+	ModelName    string                 `json:"model_name"`
+	ModelVersion string                 `json:"model_version,optional"`
+	Input        map[string]interface{} `json:"input"`
+	Framework    string                 `json:"framework,optional"`
 }
 
 type InferenceResponse struct {
@@ -37,16 +39,19 @@ type ResourceRequest struct {
 
 type TrainingTaskReq struct {
 	Name        string          `json:"name"`
-	ModelName   string          `json:"model_name"`
+	ModelName   string          `json:"model_name,optional"`
 	Framework   string          `json:"framework"`
 	Image       string          `json:"image"`
-	Command     string          `json:"command"`
+	Command     []string        `json:"command"`
 	Args        []string        `json:"args"`
 	Resources   ResourceRequest `json:"resources"`
 	Distributed bool            `json:"distributed,optional"`
 	WorkerNum   int32           `json:"worker_num,optional"`
 	Env         []EnvVar        `json:"env,optional"`
+	DatasetPath string          `json:"dataset_path,optional"`
+	OutputPath  string          `json:"output_path,optional"`
 	Priority    int             `json:"priority,default=5"`
+	MaxRetries  int             `json:"max_retries,default=3"`
 }
 
 type TrainingTaskResp struct {

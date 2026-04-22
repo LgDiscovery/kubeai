@@ -5,6 +5,7 @@ package job_scheduler
 
 import (
 	"context"
+	"kubeai-job-scheduler/internal/model"
 
 	"kubeai-job-scheduler/internal/svc"
 	"kubeai-job-scheduler/internal/types"
@@ -26,8 +27,6 @@ func NewGetInferenceTaskLogic(ctx context.Context, svcCtx *svc.ServiceContext) *
 	}
 }
 
-func (l *GetInferenceTaskLogic) GetInferenceTask(req *types.GetInferenceTaskReq) (resp *types.InferenceTask, err error) {
-	// todo: add your logic here and delete this line
-
-	return
+func (l *GetInferenceTaskLogic) GetInferenceTask(req *types.GetInferenceTaskReq) (resp *model.InferenceTask, err error) {
+	return l.svcCtx.InferenceTaskRepo.GetByTaskID(l.ctx, req.TaskID)
 }

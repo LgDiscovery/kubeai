@@ -18,15 +18,17 @@ import (
 
 type SubmitInferenceTaskLogic struct {
 	logx.Logger
-	ctx    context.Context
-	svcCtx *svc.ServiceContext
+	ctx       context.Context
+	svcCtx    *svc.ServiceContext
+	streamKey string
 }
 
 func NewSubmitInferenceTaskLogic(ctx context.Context, svcCtx *svc.ServiceContext) *SubmitInferenceTaskLogic {
 	return &SubmitInferenceTaskLogic{
-		Logger: logx.WithContext(ctx),
-		ctx:    ctx,
-		svcCtx: svcCtx,
+		Logger:    logx.WithContext(ctx),
+		ctx:       ctx,
+		svcCtx:    svcCtx,
+		streamKey: svcCtx.Config.Redis.Streams.Inference,
 	}
 }
 
@@ -68,8 +70,9 @@ func (l *SubmitInferenceTaskLogic) SubmitInference(req *types.SubmitInferenceReq
 	}
 	logx.Infof("inference task %s submitted, model: %s/%s", task.TaskID, task.ModelName, task.ModelVersion)
 
-	if err := l.saveInferenceTaskState(task); err != nil {
-		return nil, fmt.Errorf("save inference task state failed, %v", err)
+	// 4. 保存任务到数据库
+	if err := l.svcCtx.InferenceTaskRepo.Create(l.ctx, task); err != nil {
+		return nil, fmt.Errorf("save inference task failed, %v", err)
 	}
 
 	return &types.InferenceTaskResp{
@@ -77,13 +80,4 @@ func (l *SubmitInferenceTaskLogic) SubmitInference(req *types.SubmitInferenceReq
 		Status:  string(model.StatusPending),
 		Message: "task submitted successfully",
 	}, nil
-}
-
-func (l *SubmitInferenceTaskLogic) saveInferenceTaskState(task *model.InferenceTask) error {
-	key := fmt.Sprintf("kubeai:task:inference:%s", task.TaskID)
-	data, err := task.Marshal()
-	if err != nil {
-		return fmt.Errorf("marshal inference task failed, %v", err)
-	}
-	return l.svcCtx.RedisClient.Set(l.ctx, key, data, 24*time.Hour).Err()
 }

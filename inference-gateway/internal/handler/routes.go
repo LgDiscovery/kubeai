@@ -41,11 +41,6 @@ func RegisterHandlers(server *rest.Server, serverCtx *svc.ServiceContext) {
 			[]rest.Route{
 				{
 					Method:  http.MethodPost,
-					Path:    "/control/tasks/:task_id/cancel",
-					Handler: inference.CancelTrainingHandler(serverCtx),
-				},
-				{
-					Method:  http.MethodPost,
 					Path:    "/control/tasks/:task_id/pause",
 					Handler: inference.PauseTrainingHandler(serverCtx),
 				},
@@ -56,18 +51,13 @@ func RegisterHandlers(server *rest.Server, serverCtx *svc.ServiceContext) {
 				},
 				{
 					Method:  http.MethodPost,
-					Path:    "/inference/execute",
-					Handler: inference.InferenceHandler(serverCtx),
+					Path:    "/control/tasks/:task_id/retry",
+					Handler: inference.RetryTaskHandler(serverCtx),
 				},
 				{
 					Method:  http.MethodPost,
-					Path:    "/training/execute",
-					Handler: inference.TrainingHandler(serverCtx),
-				},
-				{
-					Method:  http.MethodGet,
-					Path:    "/training/tasks/:task_id",
-					Handler: inference.GetTrainingHandler(serverCtx),
+					Path:    "/inference/execute",
+					Handler: inference.InferenceHandler(serverCtx),
 				},
 			}...,
 		),

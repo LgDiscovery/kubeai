@@ -12,20 +12,27 @@ Redis:
   Password: "redis"
   DB: 0
   Streams:
-    Inference: "kubeai:inference:tasks"
-    Training: "kubeai:training:tasks"
+    Inference: "kubeai:inference:task"
+    Training: "kubeai:training:task"
   ConsumerGroup: "kubeai-scheduler"
   MaxRetries: 3
   Expiration: 24h
   RetryBackoff: 1000 #ms
 
+# 数据库配置
+Database:
+  Host: "postgres.kubeai.svc.cluster.local"
+  Port: 5432
+  User: "postgres"
+  Password: "postgres"
+  DBName: "kubeai_platform"
+  SSLMode: "disable"
+  MaxIdleConns: 10
+  MaxOpenConns: 100
+
+# 模型管理中心
 ModelManager:
   URL: "http://model-manager.kubeai.svc.cluster.local:58080"
-  Timeout: 5s
-
-# 推理网关
-InferenceGateway:
-  URL: "http://inference-gateway.kubeai.svc.cluster.local:58082"
   Timeout: 5s
 
 K8s:

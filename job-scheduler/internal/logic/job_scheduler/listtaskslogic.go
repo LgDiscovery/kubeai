@@ -27,7 +27,41 @@ func NewListTasksLogic(ctx context.Context, svcCtx *svc.ServiceContext) *ListTas
 }
 
 func (l *ListTasksLogic) ListTasks(req *types.ListTasksReq) (resp *types.ListTasksResp, err error) {
-	// todo: add your logic here and delete this line
+	offset := (req.Page - 1) * req.PageSize
+	if req.TaskType == "inference" {
+		tasks, total, err := l.svcCtx.InferenceTaskRepo.List(l.ctx, req.Status, offset, req.PageSize)
+		if err != nil {
+			return nil, err
+		}
+		items := make([]interface{}, 0, len(tasks))
+		for _, task := range tasks {
+			items = append(items, task)
+		}
+		resp = &types.ListTasksResp{
+			Items:    items,
+			Total:    total,
+			Page:     req.Page,
+			PageSize: req.PageSize,
+		}
+		return
+	} else if req.TaskType == "training" {
+		tasks, total, err := l.svcCtx.TrainingTaskRepo.List(l.ctx, req.Status, offset, req.PageSize)
 
-	return
+		if err != nil {
+			return nil, err
+		}
+		items := make([]interface{}, 0, len(tasks))
+		for _, task := range tasks {
+			items = append(items, task)
+		}
+		resp = &types.ListTasksResp{
+			Items:    items,
+			Total:    total,
+			Page:     req.Page,
+			PageSize: req.PageSize,
+		}
+		return
+	} else {
+		return nil, nil
+	}
 }

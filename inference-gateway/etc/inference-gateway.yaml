@@ -12,11 +12,23 @@ Redis:
   Password: "redis123"
   DB: 0
   Streams:
-    Inference: "kubeai:inference:tasks"
-    Training: "kubeai:training:tasks"
-    DeadLetter: "kubeai:deadLetter:tasks"
+    Inference: "kubeai:inference:task"
+    Training: "kubeai:training:task"
+    DeadLetter: "kubeai:deadLetter:task"
   ConsumerGroup: "inference-gateway"
 
+# 数据库配置
+Database:
+  Host: "postgres.kubeai.svc.cluster.local"
+  Port: 5432
+  User: "postgres"
+  Password: "postgres"
+  DBName: "kubeai_platform"
+  SSLMode: "disable"
+  MaxIdleConns: 10
+  MaxOpenConns: 100
+
+# 模型管理器配置
 ModelManager:
   URL: "http://model-manager.kubeai.svc.cluster.local:58080"
   Timeout: 5s
@@ -27,7 +39,7 @@ K8s:
   TrainingJobImage: "kubeflow/training-operator:v1"
 
 Scheduler:
-  Algorithm: "binpack"
+  Algorithm: "binpack" // spread, gpu-affinity 可配置CacheLabelPrefix, 默认 binpack
   EnableGPUPacking: true
   GPUBinpackWeight: 0.7
 

@@ -1,11 +1,12 @@
 package resources
 
 import (
-	aiv1 "inference-gateway/api/v1"
-	"inference-gateway/pkg/modelmanager"
+	"fmt"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	aiv1 "kubeai-inference-gateway/inferenceservice/api/v1"
+	modelmanager "kubeai-inference-gateway/internal/client"
 )
 
 const (
@@ -55,7 +56,7 @@ func NewStableDeployment(isvc *aiv1.InferenceService, meta *modelmanager.ModelMe
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
-							Name:  "inference-server",
+							Name:  fmt.Sprintf("%s-%s", isvc.Spec.ModelName, isvc.Spec.ModelVersion),
 							Image: getImage(isvc),
 							Ports: []corev1.ContainerPort{
 								{

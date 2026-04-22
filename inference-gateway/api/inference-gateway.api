@@ -2,7 +2,7 @@ syntax = "v1"
 
 info (
 	title:   "KubeAI 推理网关"
-	desc:    "推理请求路由、训练任务管理、CRD 生命周期控制"
+	desc:    "推理/训练任务消费、训练任务管理、CRD 生命周期控制"
 	author:  "KubeAI liu.guang"
 	version: "v1.0.0"
 )
@@ -11,11 +11,13 @@ type (
 	// 推理请求
 	InferenceRequest {
 		// 推理模型名称
-		model_name string `json:"model_name"`
+		ModelName string `json:"model_name"`
 		// model version
-		model_version string `json:"model_version,optional"`
+		ModelVersion string `json:"model_version,optional"`
 		// 推理输入
-		input map[string]interface{} `json:"input"`
+		Input map[string]interface{} `json:"input"`
+		// 推理框架
+		Framework string `json:"framework,optional"`
 	}
 	// 推理响应
 	InferenceResponse {
@@ -27,16 +29,19 @@ type (
 	// 训练任务
 	TrainingTaskReq {
 		Name        string          `json:"name"`
-		ModelName   string          `json:"model_name"`
+		ModelName   string          `json:"model_name,optional"`
 		Framework   string          `json:"framework"`
 		Image       string          `json:"image"`
-		Command     string          `json:"command"`
+		Command     []string        `json:"command"`
 		Args        []string        `json:"args"`
 		Resources   ResourceRequest `json:"resources"`
 		Distributed bool            `json:"distributed,optional"`
 		WorkerNum   int32           `json:"worker_num,optional"`
 		Env         []EnvVar        `json:"env,optional"`
+		DatasetPath string          `json:"dataset_path,optional"`
+		OutputPath  string          `json:"output_path,optional"`
 		Priority    int             `json:"priority,default=5"`
+		MaxRetries  int             `json:"max_retries,default=3"`
 	}
 	TrainingTaskResp {
 		TaskID  string `json:"task_id"`
@@ -54,7 +59,8 @@ type (
 	}
 	// 任务控制
 	ControlReq {
-		TaskID string `json:"task_id"`
+		TaskID   string `json:"task_id"`
+		TaskType string `json:"task_type"` // inference/training
 	}
 	CommonResp {
 		Code    int         `json:"code"`
@@ -72,20 +78,14 @@ service inference_gateway {
 	@handler InferenceHandler
 	post /inference/execute (InferenceRequest) returns (InferenceResponse)
 
-	@handler TrainingHandler
-	post /training/execute (TrainingTaskReq) returns (TrainingTaskResp)
-
-	@handler GetTrainingHandler
-	get /training/tasks/:task_id (ControlReq) returns (TrainingTaskResp)
-
 	@handler PauseTrainingHandler
 	post /control/tasks/:task_id/pause (ControlReq) returns (CommonResp)
 
 	@handler ResumeTrainingHandler
 	post /control/tasks/:task_id/resume (ControlReq) returns (CommonResp)
 
-	@handler CancelTrainingHandler
-	post /control/tasks/:task_id/cancel (ControlReq) returns (CommonResp)
+	@handler RetryTaskHandler
+	post /control/tasks/:task_id/retry (ControlReq) returns (CommonResp)
 }
 
 @server (

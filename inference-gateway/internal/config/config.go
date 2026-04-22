@@ -10,6 +10,7 @@ type Config struct {
 	rest.RestConf
 	Etcd         discov.EtcdConf `json:",optional"`
 	Redis        RedisConfig
+	Database     DatabaseConfig
 	ModelManager ModelManagerConfig
 	K8s          K8sConfig
 	Metrics      MetricsConfig
@@ -27,6 +28,17 @@ type RedisConfig struct {
 	DB            int
 	Streams       StreamsConfig
 	ConsumerGroup string
+}
+
+type DatabaseConfig struct {
+	Host         string
+	Port         int
+	User         string
+	Password     string
+	DBName       string
+	SSLMode      string
+	MaxIdleConns int `json:",default=10"`
+	MaxOpenConns int `json:",default=100"`
 }
 
 type StreamsConfig struct {
@@ -53,4 +65,5 @@ type SchedulerConfig struct {
 	Algorithm        string
 	EnableGPUPacking bool
 	GPUBinpackWeight float64
+	CacheLabelPrefix string `json:",optional"` // GPU 亲和性缓存标签前缀
 }

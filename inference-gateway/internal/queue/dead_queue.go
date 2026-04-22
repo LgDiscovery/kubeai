@@ -19,6 +19,15 @@ func NewDeadLetterQueue(client *redis.Client, baseStream string, group string) *
 	return &DeadLetterQueue{client, baseStream + DeadLetterStreamSuffix, group}
 }
 
+// Init 初始化消费者组（幂等）
+func (q *DeadLetterQueue) Init(ctx context.Context) error {
+	err := q.client.XGroupCreateMkStream(ctx, q.streamKey, q.group, "0").Err()
+	if err != nil && err.Error() != "BUSYGROUP Consumer Group name already exists" {
+		return err
+	}
+	return nil
+}
+
 // Push 将失败任务放入死信队列
 func (d *DeadLetterQueue) Push(ctx context.Context, taskID string, data []byte, reason string) error {
 	return d.client.XAdd(ctx, &redis.XAddArgs{
