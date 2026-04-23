@@ -16,7 +16,7 @@ type Config struct {
 	ModelManager ModelManagerConfing
 	K8s          K8sConfing
 	ResourceSync ResourceSyncConfing
-	Log          LogConfing
+	Log          LogConfig
 	Metrics      MetricsConfing
 	Database     DatabaseConfig
 }
@@ -63,11 +63,12 @@ type ResourceSyncConfing struct {
 	Interval time.Duration
 }
 
-type LogConfing struct {
-	ServiceName string
-	Mode        string
-	Level       string
-	Encoding    string
+type LogConfig struct {
+	ServiceName string `json:"serviceName"`
+	Mode        string `json:"mode"`
+	Encoding    string `json:"encoding"`
+	Level       string `json:",default=info"`
+	TimeFormat  string `json:"timeFormat"`
 }
 
 type MetricsConfing struct {

@@ -44,10 +44,11 @@ ResourceSync:
   Interval: 10s
 
 Log:
-  ServiceName: job-scheduler
+  ServiceName: kubeai-job-scheduler
   Mode: console
   Level: info
   Encoding: json
+  TimeFormat: "2006-01-02T15:04:05.000Z07:00"
 
 Metrics:
   Enabled: true

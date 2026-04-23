@@ -16,6 +16,7 @@ type Config struct {
 	Metrics      MetricsConfig
 	Scheduler    SchedulerConfig
 	ResourceSync ResourceSyncConfig
+	Log          LogConfig
 }
 
 type ResourceSyncConfig struct {
@@ -66,4 +67,12 @@ type SchedulerConfig struct {
 	EnableGPUPacking bool
 	GPUBinpackWeight float64
 	CacheLabelPrefix string `json:",optional"` // GPU 亲和性缓存标签前缀
+}
+
+type LogConfig struct {
+	ServiceName string `json:"serviceName"`
+	Mode        string `json:"mode"`
+	Encoding    string `json:"encoding"`
+	Level       string `json:",default=info"`
+	TimeFormat  string `json:"timeFormat"`
 }

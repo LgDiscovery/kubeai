@@ -139,7 +139,7 @@ func (r *TrainingJobReconciler) syncPyTorchJobStatus(tj *aiv1.TrainingJob, pytor
 
 // buildDistributedPyTorchJob 构建Kubeflow分布式训练任务
 func (r *TrainingJobReconciler) buildDistributedPyTorchJob(tj *aiv1.TrainingJob) (*trainingv1.PyTorchJob, error) {
-	jobName := fmt.Sprintf("%s-%s-dist", tj.Name)
+	jobName := fmt.Sprintf("%s-dist", tj.Name)
 	replicaSpecs := map[trainingv1.ReplicaType]*trainingv1.ReplicaSpec{}
 
 	backoffLimit := int32(3)

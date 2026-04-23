@@ -29,11 +29,16 @@ func NewConsumerLogic(ctx context.Context, svcCtx *svc.ServiceContext, streamKey
 
 // ProcessInferenceTask 处理推理任务：创建 InferenceService CRD
 func (l *ConsumerLogic) ProcessInferenceTask(taskID string, data []byte) error {
+	_, err := l.svcCtx.InferenceTaskRepo.GetByTaskID(l.ctx, taskID)
+	if err != nil {
+		return fmt.Errorf("get inference task failed, %v", err)
+	}
+
 	task, err := model.UnmarshalInferenceTask(data)
 	if err != nil {
 		return fmt.Errorf("unmarshal inference task failed, %v", err)
 	}
-	logx.Infof("Processing inference task %s", task.TaskID)
+	logx.Infof("Processing inference task %s", taskID)
 
 	// 1. 检查是否已存在 InferenceService
 	isvcName := fmt.Sprintf("%s-%s", task.ModelName, task.ModelVersion)
@@ -137,13 +142,17 @@ func (l *ConsumerLogic) saveInferenceTaskState(task *model.InferenceTask) error 
 
 // ProcessTrainingTask 处理训练任务：创建 TrainingJob CRD
 func (l *ConsumerLogic) ProcessTrainingTask(taskID string, data []byte) error {
+	_, err := l.svcCtx.TrainingTaskRepo.GetByTaskID(l.ctx, taskID)
+	if err != nil {
+		return fmt.Errorf("get training task failed, %v", err)
+	}
 	task, err := model.UnmarshalTrainingTask(data)
 	if err != nil {
 		return fmt.Errorf("unmarshal training task failed, %v", err)
 	}
-	logx.Infof("Processing training task %s", task.TaskID)
+	logx.Infof("Processing training task %s", taskID)
 
-	jobName := fmt.Sprintf("%s-%s-dist", task.TaskID)
+	jobName := fmt.Sprintf("%s-dist", taskID)
 
 	// 检查是否已存在 TrainingJob
 	gvr := schema.GroupVersionResource{

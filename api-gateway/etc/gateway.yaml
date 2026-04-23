@@ -39,10 +39,11 @@ Database:
 
 # 日志
 Log:
-  ServiceName: kubeai-gateway
+  ServiceName: kubeai-api-gateway
   Mode: console
   Level: info
   Encoding: json
+  TimeFormat: "2006-01-02T15:04:05.000Z07:00"
 
 # JWT鉴权
 Auth:

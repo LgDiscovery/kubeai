@@ -63,10 +63,11 @@ type MetricsConfig struct {
 }
 
 type LogConfig struct {
-	ServiceName string `mapstructure:"serviceName" json:"serviceName"`
-	Mode        string `mapstructure:"mode" json:"mode"`
-	Encoding    string `mapstructure:"encoding" json:"encoding"`
+	ServiceName string `json:"serviceName"`
+	Mode        string `json:"mode"`
+	Encoding    string `json:"encoding"`
 	Level       string `json:",default=info"`
+	TimeFormat  string `json:"timeFormat"`
 }
 
 type DiscoveryConfig struct {
