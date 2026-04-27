@@ -30,7 +30,7 @@ func NewPauseTrainingLogic(ctx context.Context, svcCtx *svc.ServiceContext) *Pau
 }
 
 func (l *PauseTrainingLogic) PauseTraining(req *types.ControlReq) (resp *types.CommonResp, err error) {
-	jobName := fmt.Sprintf("rain%-%s", req.TaskID)
+	jobName := fmt.Sprintf("train-%s", req.TaskID)
 	job := &aiv1.TrainingJob{}
 	if err := l.svcCtx.CtrlClient.Get(l.ctx, k8sTypes.NamespacedName{Name: jobName, Namespace: l.svcCtx.Config.K8s.Namespace}, job); err != nil {
 		return nil, err

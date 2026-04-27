@@ -161,7 +161,7 @@ func (l *ConsumerLogic) ProcessTrainingTask(taskID string, data []byte) error {
 		return fmt.Errorf("get model failed, %v", err)
 	}
 
-	jobName := fmt.Sprintf("%s-dist", taskID)
+	jobName := fmt.Sprintf("train-%s", taskID)
 
 	// 检查是否已存在 TrainingJob
 	gvr := schema.GroupVersionResource{
