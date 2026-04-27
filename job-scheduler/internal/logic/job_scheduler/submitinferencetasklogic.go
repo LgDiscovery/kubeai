@@ -48,7 +48,7 @@ func (l *SubmitInferenceTaskLogic) SubmitInference(req *types.SubmitInferenceReq
 
 	// 3. 构建任务对象
 	task := &model.InferenceTask{
-		TaskID:       "inference-" + uuid.New().String()[:8],
+		TaskID:       "inference-" + uuid.New().String(),
 		ModelName:    req.ModelName,
 		ModelVersion: req.ModelVersion,
 		ModelPath:    modelURL, // 直接传递下载 URL

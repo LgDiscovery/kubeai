@@ -15,10 +15,10 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	k8srest "k8s.io/client-go/rest"
 	fiv1 "kubeai-inference-gateway/inferenceservice/api/v1"
 	modelClient "kubeai-inference-gateway/internal/client"
 	"kubeai-inference-gateway/internal/config"
+	"kubeai-inference-gateway/internal/help"
 	"kubeai-inference-gateway/internal/middleware"
 	"kubeai-inference-gateway/internal/queue"
 	"kubeai-inference-gateway/internal/repo"
@@ -105,7 +105,7 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	}
 
 	// K8s config
-	k8sConfig, err := k8srest.InClusterConfig() // 从 Pod 内部获取 K8s 配置
+	k8sConfig, err := help.LoadKubeConfig()
 	if err != nil {
 		logx.Must(err)
 	}

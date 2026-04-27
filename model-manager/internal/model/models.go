@@ -15,8 +15,8 @@ type Model struct {
 	TaskType    string         `gorm:"size:50" json:"task_type"` // classification/regression/llm
 	Owner       string         `gorm:"size:100" json:"owner"`
 	Labels      string         `gorm:"type:jsonb" json:"labels"` // JSON 格式标签
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
+	CreatedAt   time.Time      `gorm:"CreateTime" json:"created_at"`
+	UpdatedAt   time.Time      `gorm:"UpdateTime" json:"updated_at"`
 	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
 	Versions    []ModelVersion `gorm:"foreignKey:ModelID" json:"versions,omitempty"`
 }
@@ -35,8 +35,8 @@ type ModelVersion struct {
 	Size         int64          `json:"size"`                                   // 文件大小(字节)
 	Checksum     string         `gorm:"size:128" json:"checksum"`               // SHA256
 	Status       string         `gorm:"size:20;default:'active'" json:"status"` // active/staged/archived
-	CreatedAt    time.Time      `json:"created_at"`
-	UpdatedAt    time.Time      `json:"updated_at"`
+	CreatedAt    time.Time      `gorm:"CreateTime" json:"created_at"`
+	UpdatedAt    time.Time      `gorm:"UpdateTime" json:"updated_at"`
 	DeletedAt    gorm.DeletedAt `gorm:"index" json:"-"`
 	Model        Model          `gorm:"foreignKey:ModelID" json:"model,omitempty"`
 }

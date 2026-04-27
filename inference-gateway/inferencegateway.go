@@ -66,6 +66,7 @@ func main() {
 		Client:           ctx.Mgr.GetClient(),
 		Scheme:           ctx.Mgr.GetScheme(),
 		ModelManagerAddr: c.ModelManager.URL,
+		ModelClient:      ctx.ModelMgrClient,
 	}).SetupWithManager(ctx.Mgr); err != nil {
 		logx.Must(err)
 	}

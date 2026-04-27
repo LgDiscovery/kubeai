@@ -2,19 +2,15 @@ package resources
 
 import (
 	"fmt"
-	aiv1 "inference-gateway/api/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	aiv1 "kubeai-inference-gateway/inferenceservice/api/v1"
 )
 
 // NewIngress 为了实现 Nginx Ingress 的灰度，我们需要创建 两个 Ingress 资源：
 // 主 Ingress：处理大部分流量，指向 Stable Service。
 // 副 Ingress：带有 canary 注解，指向 Canary Service。
 func NewIngress(isvc *aiv1.InferenceService) *networkingv1.Ingress {
-	if isvc.Spec.Service == nil || isvc.Spec.Service.Host == "" {
-		return nil // 没有配置 Host 则不创建
-	}
-
 	annotations := map[string]string{
 		"kubernetes.io/ingress.class": "nginx",
 	}

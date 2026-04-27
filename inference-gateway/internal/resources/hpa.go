@@ -1,10 +1,10 @@
 package resources
 
 import (
-	aiv1 "inference-gateway/api/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2beta2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	aiv1 "kubeai-inference-gateway/inferenceservice/api/v1"
 )
 
 // NewHPA creates the HorizontalPodAutoscaler targeting the Stable Deployment

@@ -65,6 +65,13 @@ type ModelListResp struct {
 	PageSize int     `json:"page_size"`
 }
 
+type ModelMetadataResp struct {
+	ModelName    string `json:"model_name"`
+	ModelVersion string `json:"model_version"`
+	Framework    string `json:"framework"`
+	StoragePath  string `json:"storage_path"`
+}
+
 type ModelVersion struct {
 	ID           uint   `json:"id"`
 	ModelID      uint   `json:"model_id"`
@@ -93,7 +100,10 @@ type UpdateModelReq struct {
 }
 
 type UpdateVersionStatusReq struct {
-	Name    string `form:"name"`
-	Version string `form:"version"`
-	Status  string `form:"status"`
+	Name     string `form:"name"`
+	Version  string `form:"version"`
+	Status   string `form:"status"`
+	Message  string `form:"message,optional"`
+	Instance string `form:"instance,optional"`
+	Node     string `form:"node,optional"`
 }

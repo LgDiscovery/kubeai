@@ -45,7 +45,10 @@ type (
 )
 service inference_gateway {
 	@handler InferenceHandler
-	post /inference/execute (InferenceRequest) returns (InferenceResponse)
+	post /execute (InferenceRequest) returns (InferenceResponse)
+
+	@handler CancelTrainingHandler
+	post /control/tasks/:task_id/cancel (ControlReq) returns (CommonResp)
 
 	@handler PauseTrainingHandler
 	post /control/tasks/:task_id/pause (ControlReq) returns (CommonResp)

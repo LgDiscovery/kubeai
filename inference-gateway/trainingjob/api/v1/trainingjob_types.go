@@ -26,12 +26,13 @@ import (
 
 // TrainingJobSpec defines the desired state of TrainingJob
 type TrainingJobSpec struct {
-	// 深度学习框架 pytorch/tensorflow
+	// 深度学习框架 pytorch/tensorflow/onnx
 	Framework string `json:"framework"`
 	// 容器镜像
-	Image string `json:"image"`
+	Image string   `json:"image"`
+	Args  []string `json:"args,omitempty"`
 	// 启动命令
-	Command []string `json:"command"`
+	Command []string `json:"command,omitempty"`
 
 	// 分布式训练核心配置
 	Distributed bool  `json:"distributed,omitempty"` // 是否开启分布式
@@ -50,7 +51,7 @@ type TrainingJobSpec struct {
 	// 完成后自动清理时间（秒）
 	TTLSecondsAfterFinished int32 `json:"ttlSecondsAfterFinished,omitempty"`
 	// 关联模型ID (对接业务)
-	ModelID string `json:"modelID,omitempty"`
+	ModelID uint `json:"modelID,omitempty"`
 
 	// 监控/日志开关
 	EnableMonitor bool `json:"enableMonitor,omitempty"`
@@ -66,14 +67,16 @@ type ResourceRequirements struct {
 
 // TrainingJobStatus defines the observed state of TrainingJob.
 type TrainingJobStatus struct {
-	Conditions     []metav1.Condition `json:"conditions,omitempty"`
-	StartTime      *metav1.Time       `json:"startTime,omitempty"`
-	CompletionTime *metav1.Time       `json:"completionTime,omitempty"`
-	JobName        string             `json:"jobName,omitempty"`
-	Active         int32              `json:"active,omitempty"`
-	Succeeded      int32              `json:"succeeded,omitempty"`
-	Failed         int32              `json:"failed,omitempty"`
-	Phase          string             `json:"phase,omitempty"` // Pending/Running/Succeeded/Failed
+	// Phase is the current phase of the training job (Pending/Running/Succeeded/Failed)
+	Phase string `json:"phase,omitempty"`
+	// Reason is a brief reason for the current phase
+	Reason string `json:"reason,omitempty"`
+	// Message is a human-readable message explaining the current phase
+	Message string `json:"message,omitempty"`
+	// LastTransitionTime is the last time the status transitioned
+	LastTransitionTime metav1.Time `json:"lastTransitionTime,omitempty"`
+	// Conditions represents the latest available observations of the job's current state
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true

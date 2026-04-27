@@ -105,28 +105,31 @@ func (a *StringArray) Scan(value interface{}) error {
 
 // TrainingTask 训练任务
 type TrainingTask struct {
-	ID           int64           `gorm:"primaryKey;autoIncrement" json:"-"`
-	TaskID       string          `gorm:"column:task_id;type:varchar(64);uniqueIndex;not null" json:"task_id"`
-	Name         string          `gorm:"column:name;type:varchar(255);not null" json:"name"`
-	ModelName    string          `gorm:"column:model_name;type:varchar(255)" json:"model_name"`
-	Framework    string          `gorm:"column:framework;type:varchar(50);not null" json:"framework"`
-	Image        string          `gorm:"column:image;type:varchar(255);not null" json:"image"`
-	Command      StringArray     `gorm:"column:command;type:jsonb;not null" json:"command"`
-	Distributed  bool            `gorm:"column:distributed;default:false" json:"distributed"` // 新增
-	WorkerNum    int32           `gorm:"column:worker_num;default:1" json:"worker_num"`       // 新增
-	Env          []EnvVar        `gorm:"column:env;type:jsonb" json:"env"`
-	Args         StringArray     `gorm:"column:args;type:jsonb" json:"args"`
-	Resources    ResourceRequest `gorm:"column:resources;type:jsonb;not null" json:"resources"`
-	DatasetPath  string          `gorm:"column:dataset_path;type:text" json:"dataset_path"`
-	OutputPath   string          `gorm:"column:output_path;type:text" json:"output_path"`
-	Status       TaskStatus      `gorm:"column:status;type:varchar(20);default:pending;index" json:"status"`
-	Priority     int             `gorm:"column:priority;default:5" json:"priority"`
-	RetryCount   int             `gorm:"column:retry_count;default:0" json:"retry_count"`
-	MaxRetries   int             `gorm:"column:max_retries;default:3" json:"max_retries"`
-	PodName      string          `gorm:"column:pod_name;type:varchar(255)" json:"pod_name"`
-	ErrorMessage string          `gorm:"column:error_message;type:text" json:"error_message"`
-	CreatedAt    time.Time       `gorm:"column:created_at;autoCreateTime" json:"created_at"`
-	UpdatedAt    time.Time       `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
+	ID            int64           `gorm:"primaryKey;autoIncrement" json:"-"`
+	TaskID        string          `gorm:"column:task_id;type:varchar(64);uniqueIndex;not null" json:"task_id"`
+	Name          string          `gorm:"column:name;type:varchar(255);not null" json:"name"`
+	ModelName     string          `gorm:"column:model_name;type:varchar(255)" json:"model_name"`
+	Framework     string          `gorm:"column:framework;type:varchar(50);not null" json:"framework"`
+	Image         string          `gorm:"column:image;type:varchar(255);not null" json:"image"`
+	Command       StringArray     `gorm:"column:command;type:jsonb;not null" json:"command"`
+	Distributed   bool            `gorm:"column:distributed;default:false" json:"distributed"`
+	WorkerNum     int32           `gorm:"column:worker_num;default:1" json:"worker_num"`
+	MasterNum     int32           `gorm:"column:master_num;default:1" json:"master_num"`
+	Env           []EnvVar        `gorm:"column:env;type:jsonb" json:"env"`
+	Args          StringArray     `gorm:"column:args;type:jsonb" json:"args"`
+	Resources     ResourceRequest `gorm:"column:resources;type:jsonb;not null" json:"resources"`
+	DatasetPath   string          `gorm:"column:dataset_path;type:text" json:"dataset_path"`
+	OutputPath    string          `gorm:"column:output_path;type:text" json:"output_path"`
+	Status        TaskStatus      `gorm:"column:status;type:varchar(20);default:pending;index" json:"status"`
+	Priority      int             `gorm:"column:priority;default:5" json:"priority"`
+	RetryCount    int             `gorm:"column:retry_count;default:0" json:"retry_count"`
+	MaxRetries    int             `gorm:"column:max_retries;default:3" json:"max_retries"`
+	PodName       string          `gorm:"column:pod_name;type:varchar(255)" json:"pod_name"`
+	ErrorMessage  string          `gorm:"column:error_message;type:text" json:"error_message"`
+	CreatedAt     time.Time       `gorm:"column:created_at;autoCreateTime" json:"created_at"`
+	UpdatedAt     time.Time       `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
+	EnableMonitor bool            `gorm:"column:enable_monitor;default:false" json:"enable_monitor"`
+	EnableLogs    bool            `gorm:"column:enable_logs;default:false" json:"enable_logs"`
 }
 
 func (t *TrainingTask) Marshal() ([]byte, error) {

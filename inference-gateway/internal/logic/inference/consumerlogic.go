@@ -67,6 +67,10 @@ func (l *ConsumerLogic) ProcessInferenceTask(taskID string, data []byte) error {
 
 	// 3构建 InferenceService 对象
 	isvc := &aiv1.InferenceService{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "InferenceService",
+			APIVersion: aiv1.GroupVersion.String(),
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      isvcName,
 			Namespace: l.svcCtx.Config.K8s.Namespace,
@@ -152,6 +156,11 @@ func (l *ConsumerLogic) ProcessTrainingTask(taskID string, data []byte) error {
 	}
 	logx.Infof("Processing training task %s", taskID)
 
+	md, err := l.svcCtx.ModelMgrClient.GetModel(l.ctx, task.ModelName)
+	if err != nil {
+		return fmt.Errorf("get model failed, %v", err)
+	}
+
 	jobName := fmt.Sprintf("%s-dist", taskID)
 
 	// 检查是否已存在 TrainingJob
@@ -178,6 +187,10 @@ func (l *ConsumerLogic) ProcessTrainingTask(taskID string, data []byte) error {
 
 	// 构建 TrainingJob
 	trainingJob := &tiv1.TrainingJob{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "TrainingJob",
+			APIVersion: tiv1.GroupVersion.String(),
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jobName,
 			Namespace: l.svcCtx.Config.K8s.Namespace,
@@ -185,16 +198,22 @@ func (l *ConsumerLogic) ProcessTrainingTask(taskID string, data []byte) error {
 		Spec: tiv1.TrainingJobSpec{
 			Framework:   task.Framework,
 			Image:       task.Image,
+			Args:        task.Args,
 			Command:     task.Command,
 			Distributed: task.Distributed,
 			WorkerNum:   task.WorkerNum,
+			MasterNum:   task.MasterNum,
 			Resources: tiv1.ResourceRequirements{
 				CPU:    task.Resources.CPU,
 				Memory: task.Resources.Memory,
 				GPU:    task.Resources.GPU,
 			},
-			Env:          convertEnvVars(task.Env),
-			BackoffLimit: 3,
+			Env:                     convertEnvVars(task.Env),
+			BackoffLimit:            3,
+			TTLSecondsAfterFinished: 60,
+			ModelID:                 md.ID,
+			EnableMonitor:           task.EnableMonitor,
+			EnableLogs:              task.EnableLogs,
 		},
 	}
 	if err := l.svcCtx.CtrlClient.Create(l.ctx, trainingJob); err != nil {

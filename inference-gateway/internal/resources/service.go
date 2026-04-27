@@ -1,10 +1,10 @@
 package resources
 
 import (
-	aiv1 "inference-gateway/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	aiv1 "kubeai-inference-gateway/inferenceservice/api/v1"
 )
 
 // NewStableService creates the main service
@@ -48,9 +48,6 @@ func NewStableService(isvc *aiv1.InferenceService) *corev1.Service {
 
 // NewCanaryService creates the canary service
 func NewCanaryService(isvc *aiv1.InferenceService) *corev1.Service {
-	if isvc.Spec.Canary == nil {
-		return nil
-	}
 	svcType := corev1.ServiceTypeClusterIP
 	if isvc.Spec.Service != nil && isvc.Spec.Service.Type != "" {
 		svcType = isvc.Spec.Service.Type

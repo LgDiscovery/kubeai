@@ -76,12 +76,21 @@ type (
 		Parameters       string `form:"parameters,optional"`
 	}
 	UpdateVersionStatusReq {
-		Name    string `form:"name"`
-		Version string `form:"version"`
-		Status  string `form:"status"`
+		Name     string `form:"name"`
+		Version  string `form:"version"`
+		Status   string `form:"status"`
+		Message  string `form:"message,optional"`
+		Instance string `form:"instance,optional"`
+		Node     string `form:"node,optional"`
 	}
 	DownloadResp {
 		StoragePath string `json:"storage_path"`
+	}
+	ModelMetadataResp {
+		ModelName    string `json:"model_name"`
+		ModelVersion string `json:"model_version"`
+		Framework    string `json:"framework"`
+		StoragePath  string `json:"storage_path"`
 	}
 	// 通用请求
 	CommonReq {
@@ -129,11 +138,14 @@ service model_manager {
 	@handler GetVersionHandler
 	get /models/:name/versions/:version (CommonReq) returns (ModelVersion)
 
+	@handler GetMetadataHandler
+	get /models/:name/versions/:version/metadata (CommonReq) returns (ModelMetadataResp)
+
 	@handler DownloadVersionHandler
 	get /models/:name/versions/:version/download (CommonReq) returns (DownloadResp)
 
 	@handler UpdateVersionStatusHandler
-	patch /models/:name/versions/:version/status (UpdateVersionStatusReq) returns (CommonResp)
+	post /models/version/status (UpdateVersionStatusReq) returns (CommonResp)
 
 	@handler DeleteVersionHandler
 	delete /models/:name/versions/:version (CommonReq) returns (CommonResp)

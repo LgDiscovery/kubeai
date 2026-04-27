@@ -9,7 +9,7 @@ Etcd:
 
 Redis:
   Addr: "redis.kubeai.svc.cluster.local:6379"
-  Password: "redis"
+  Password: "redis123"
   DB: 0
   Streams:
     Inference: "kubeai:inference:task"

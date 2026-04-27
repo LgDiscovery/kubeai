@@ -54,7 +54,7 @@ Auth:
 Redis:
   Host: 127.0.0.1
   Port: 6379
-  Pass: "redis"
+  Pass: "redis123"
   Db: 0
 # 限流配置
 RateLimit:

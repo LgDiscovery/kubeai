@@ -33,6 +33,33 @@ type ModelVersion struct {
 	Checksum    string `json:"checksum"`
 }
 
+type Model struct {
+	ID          uint           `json:"id"`
+	Name        string         `json:"name"`
+	Description string         `json:"description,optional"`
+	Framework   string         `json:"framework,optional"`
+	TaskType    string         `json:"task_type,optional"`
+	Owner       string         `json:"owner,optional"`
+	Labels      string         `json:"labels,optional"`
+	CreatedAt   string         `json:"created_at"`
+	UpdatedAt   string         `json:"updated_at"`
+	Versions    []ModelVersion `json:"versions,optional"`
+}
+
+func (c *ModelManagerClient) GetModel(ctx context.Context, modelName string) (*Model, error) {
+	url := fmt.Sprintf("%s/api/v1/models/%s", c.baseURL, modelName)
+	httpResp, err := c.httpClient.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer httpResp.Body.Close()
+	model := &Model{}
+	if err := json.NewDecoder(httpResp.Body).Decode(model); err != nil {
+		return nil, err
+	}
+	return model, nil
+}
+
 // CheckModelAvailable 校验模型是否可用，返回模型版本信息
 func (c *ModelManagerClient) CheckModelAvailable(ctx context.Context, modelName, version string) (*ModelVersion, error) {
 	url := fmt.Sprintf("%s/api/v1/models/%s/versions/%s", c.baseURL, modelName, version)
@@ -92,6 +119,7 @@ func (c *ModelManagerClient) GetModelDownloadURL(ctx context.Context, modelName,
 type ModelMetadata struct {
 	ModelName    string `json:"modelName"`
 	ModelVersion string `json:"modelVersion"`
+	Framework    string `json:"framework"`
 	// 模型在 MinIO/S3 中的路径，例如: s3://models/bert/v1/model.tar.gz
 	StoragePath string `json:"storagePath"`
 }

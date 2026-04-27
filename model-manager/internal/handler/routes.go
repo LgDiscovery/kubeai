@@ -90,8 +90,13 @@ func RegisterHandlers(server *rest.Server, serverCtx *svc.ServiceContext) {
 					Handler: model.DownloadVersionHandler(serverCtx),
 				},
 				{
-					Method:  http.MethodPatch,
-					Path:    "/models/:name/versions/:version/status",
+					Method:  http.MethodGet,
+					Path:    "/models/:name/versions/:version/metadata",
+					Handler: model.GetMetadataHandler(serverCtx),
+				},
+				{
+					Method:  http.MethodPost,
+					Path:    "/models/version/status",
 					Handler: model.UpdateVersionStatusHandler(serverCtx),
 				},
 			}...,
