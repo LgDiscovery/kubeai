@@ -57,7 +57,7 @@ type ServiceContext struct {
 	Mgr               manager.Manager                 // K8s Operator Manager
 	ResourceTracker   *scheduler.ResourceTracker      // 资源跟踪器
 	PlacementStrategy scheduler.PlacementStrategy     // 节点选择策略
-	DeadLetterQueue   *queue.TaskQueue                // 死信队列
+	DeadLetterQueue   *queue.DeadLetterQueue          // 死信队列
 	InferenceTaskRepo *repo.InferenceTaskRepo         // 推理任务 Repository
 	TrainingTaskRepo  *repo.TrainingTaskRepo          // 训练任务 Repository
 }
@@ -136,7 +136,7 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	// Queues
 	inferenceQueue := queue.NewTaskQueue(rdb, c.Redis.Streams.Inference, c.Redis.ConsumerGroup)
 	trainingQueue := queue.NewTaskQueue(rdb, c.Redis.Streams.Training, c.Redis.ConsumerGroup)
-	deadLetterQueue := queue.NewTaskQueue(rdb, c.Redis.Streams.DeadLetter, c.Redis.ConsumerGroup)
+	deadLetterQueue := queue.NewDeadLetterQueue(rdb, c.Redis.Streams.DeadLetter, c.Redis.ConsumerGroup)
 
 	metricsMiddleware := middleware.NewMetricsMiddleware().Handle
 

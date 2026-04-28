@@ -115,7 +115,7 @@ func (l *ConsumerLogic) handleInferenceTaskFailure(task *model.InferenceTask, er
 		task.Status = model.StatusFailed
 		// 4. 移入死信队列
 		data, _ := task.Marshal()
-		if err := l.svcCtx.DeadLetterQueue.Push(l.ctx, task.TaskID, data, task.Priority); err != nil {
+		if err := l.svcCtx.DeadLetterQueue.Push(l.ctx, task.TaskID, data, task.ErrorMessage, "inference"); err != nil {
 			return fmt.Errorf("dead letter queue push failed, %v", err)
 		}
 	} else {
@@ -238,7 +238,7 @@ func (l *ConsumerLogic) handleTrainingTaskFailure(task *model.TrainingTask, err 
 		task.Status = model.StatusFailed
 		// 4. 移入死信队列
 		data, _ := task.Marshal()
-		if err := l.svcCtx.DeadLetterQueue.Push(l.ctx, task.TaskID, data, task.Priority); err != nil {
+		if err := l.svcCtx.DeadLetterQueue.Push(l.ctx, task.TaskID, data, task.ErrorMessage, "training"); err != nil {
 			return fmt.Errorf("dead letter queue push failed, %v", err)
 		}
 	} else {

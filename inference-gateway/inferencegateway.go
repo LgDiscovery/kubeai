@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"syscall"
+	"time"
 
 	"kubeai-inference-gateway/internal/config"
 	"kubeai-inference-gateway/internal/handler"
@@ -40,19 +41,27 @@ func main() {
 	)
 	defer pub.Stop()
 	logx.Infof("✅ 服务已注册到 etcd: %s", c.Etcd.Key)
+	rootCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	ctx := svc.NewServiceContext(c)
 	// 初始化队列消费者组
-	if err := ctx.InferenceQueue.Init(context.Background()); err != nil {
+	if err := ctx.InferenceQueue.Init(rootCtx); err != nil {
 		logx.Must(err)
 	}
-	if err := ctx.TrainingQueue.Init(context.Background()); err != nil {
+	if err := ctx.TrainingQueue.Init(rootCtx); err != nil {
+		logx.Must(err)
+	}
+	if err := ctx.DeadLetterQueue.Init(rootCtx); err != nil {
 		logx.Must(err)
 	}
 
 	// 启动消费者
-	go startInferenceConsumer(ctx)
-	go startTrainingConsumer(ctx)
+	go startInferenceConsumer(rootCtx, ctx)
+	go startTrainingConsumer(rootCtx, ctx)
+	go startDeadLetterConsumer(rootCtx, ctx)
+	go startInferencePendingClaim(rootCtx, ctx)
+	go startTrainingPendingClaim(rootCtx, ctx)
 
 	// 启动控制器管理器
 	go func() {
@@ -87,6 +96,8 @@ func main() {
 	go func() {
 		<-quit
 		logx.Info("Shutting down inference-gateway...")
+		// 取消所有 goroutine
+		cancel()
 		server.Stop()
 	}()
 
@@ -94,18 +105,70 @@ func main() {
 	server.Start()
 }
 
-func startInferenceConsumer(ctx *svc.ServiceContext) {
-	consumerLogic := logic.NewConsumerLogic(context.Background(), ctx, ctx.Config.Redis.Streams.Inference)
-	ctx.InferenceQueue.Consume(context.Background(), "inference-consumer",
+func startInferenceConsumer(rootCtx context.Context, ctx *svc.ServiceContext) {
+	consumerLogic := logic.NewConsumerLogic(rootCtx, ctx, ctx.Config.Redis.Streams.Inference)
+	ctx.InferenceQueue.Consume(rootCtx, "inference-consumer",
 		func(taskID string, data []byte) error {
 			return consumerLogic.ProcessInferenceTask(taskID, data)
 		})
 }
 
-func startTrainingConsumer(ctx *svc.ServiceContext) {
-	consumerLogic := logic.NewConsumerLogic(context.Background(), ctx, ctx.Config.Redis.Streams.Training)
-	ctx.TrainingQueue.Consume(context.Background(), "training-consumer",
+func startTrainingConsumer(rootCtx context.Context, ctx *svc.ServiceContext) {
+	consumerLogic := logic.NewConsumerLogic(rootCtx, ctx, ctx.Config.Redis.Streams.Training)
+	ctx.TrainingQueue.Consume(rootCtx, "training-consumer",
 		func(taskID string, data []byte) error {
 			return consumerLogic.ProcessTrainingTask(taskID, data)
+		})
+}
+
+func startDeadLetterConsumer(rootCtx context.Context, ctx *svc.ServiceContext) {
+	consumerLogic := logic.NewConsumerLogic(rootCtx, ctx, ctx.Config.Redis.Streams.DeadLetter)
+	ctx.DeadLetterQueue.Pop(rootCtx, "dead-letter-consumer",
+		func(taskID string, data []byte, taskType string) error {
+			if taskType == "training" {
+				return consumerLogic.ProcessTrainingTask(taskID, data)
+			} else {
+				return consumerLogic.ProcessInferenceTask(taskID, data)
+			}
+		})
+}
+
+// startInferencePendingClaim 推理队列 超时消息认领
+func startInferencePendingClaim(rootCtx context.Context, ctx *svc.ServiceContext) {
+	// 超时时间：30秒未处理的消息，自动认领重试
+	const minIdle = 30 * time.Second
+	consumerLogic := logic.NewConsumerLogic(rootCtx, ctx, ctx.Config.Redis.Streams.Inference)
+
+	// 调用ClaimPending，处理失败则推入死信队列
+	ctx.InferenceQueue.ClaimPending(rootCtx, "inference-pending-claimer", minIdle,
+		func(taskID string, data []byte) error {
+			// 执行业务逻辑
+			err := consumerLogic.ProcessInferenceTask(taskID, data)
+			if err != nil {
+				// 🔥 重试失败：推入死信队列
+				logx.Errorf("推理任务[%s]重试失败，加入死信队列", taskID)
+				_ = ctx.DeadLetterQueue.Push(rootCtx, taskID, data, "inference_pending_timeout", "inference")
+			}
+			return err
+		})
+}
+
+// startTrainingPendingClaim 训练队列 超时消息认领
+func startTrainingPendingClaim(rootCtx context.Context, ctx *svc.ServiceContext) {
+	// 超时时间：30秒未处理的消息，自动认领重试
+	const minIdle = 30 * time.Second
+	consumerLogic := logic.NewConsumerLogic(rootCtx, ctx, ctx.Config.Redis.Streams.Training)
+
+	// 调用ClaimPending，处理失败则推入死信队列
+	ctx.TrainingQueue.ClaimPending(rootCtx, "training-pending-claimer", minIdle,
+		func(taskID string, data []byte) error {
+			// 执行业务逻辑
+			err := consumerLogic.ProcessTrainingTask(taskID, data)
+			if err != nil {
+				// 🔥 重试失败：推入死信队列
+				logx.Errorf("训练任务[%s]重试失败，加入死信队列", taskID)
+				_ = ctx.DeadLetterQueue.Push(rootCtx, taskID, data, "training_pending_timeout", "training")
+			}
+			return err
 		})
 }
