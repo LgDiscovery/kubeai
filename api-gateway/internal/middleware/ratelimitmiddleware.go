@@ -26,6 +26,7 @@ func (m *RateLimitMiddleware) Handle(next http.HandlerFunc) http.HandlerFunc {
 		// 1. 未开启限流：返回透传中间件
 		if !m.c.Enabled {
 			next(w, r) // 直接透传，不做任何处理
+			return
 		}
 
 		// 2. 初始化限流器（分布式限流）

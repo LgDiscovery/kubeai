@@ -52,7 +52,7 @@ type (
 @server (
 	prefix:     "/api/v1/auth"
 	group:      "auth"
-	middleware: MetricsMiddleware,CorsMiddleware // 仅指标采集，CORS 支持跨域请求
+	middleware: CorsMiddleware,MetricsMiddleware // 仅指标采集，CORS 支持跨域请求
 )
 service gateway {
 	// 登录
@@ -77,7 +77,7 @@ service gateway {
 @server (
 	prefix:     "/api/v1"
 	group:      "business"
-	middleware: AuthMiddleware,MetricsMiddleware,RateLimitMiddleware,CorsMiddleware
+	middleware: CorsMiddleware,AuthMiddleware,RateLimitMiddleware,MetricsMiddleware
 )
 service gateway {
 	// 模型管理

@@ -17,7 +17,7 @@ import (
 func RegisterHandlers(server *rest.Server, serverCtx *svc.ServiceContext) {
 	server.AddRoutes(
 		rest.WithMiddlewares(
-			[]rest.Middleware{serverCtx.MetricsMiddleware,serverCtx.CorsMiddleware},
+			[]rest.Middleware{serverCtx.CorsMiddleware, serverCtx.MetricsMiddleware},
 			[]rest.Route{
 				{
 					Method:  http.MethodPost,
@@ -36,7 +36,7 @@ func RegisterHandlers(server *rest.Server, serverCtx *svc.ServiceContext) {
 
 	server.AddRoutes(
 		rest.WithMiddlewares(
-			[]rest.Middleware{serverCtx.AuthMiddleware, serverCtx.MetricsMiddleware, serverCtx.RateLimitMiddleware, serverCtx.CorsMiddleware},
+			[]rest.Middleware{serverCtx.CorsMiddleware, serverCtx.AuthMiddleware, serverCtx.RateLimitMiddleware, serverCtx.MetricsMiddleware},
 			[]rest.Route{
 				{
 					Method:  http.MethodPost,

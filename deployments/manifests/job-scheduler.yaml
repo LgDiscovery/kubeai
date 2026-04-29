@@ -52,7 +52,7 @@ spec:
             - name: DB_PASSWORD
               value: "postgres"
             - name: DB_NAME
-              value: "ai_platform"
+              value: "kubeai_platform"
             - name: MINIO_ENDPOINT
               value: "minio.kubeai.svc.cluster.local:9000"
             - name: MINIO_ACCESS_KEY
