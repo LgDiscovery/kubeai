@@ -19,7 +19,7 @@ Etcd:
 # 服务发现配置（上游服务在 etcd 中的注册前缀）
 Discovery:
   ModelManagerKey: "kubeai.services.model-manager"    # 对应服务注册键
-  TaskSchedulerKey: "kubeai.services.task-scheduler"
+  TaskSchedulerKey: "kubeai.services.job-scheduler"
   InferenceGatewayKey: "kubeai.services.inference-gateway"
   ObservabilityGatewayKey: "kubeai.services.observability-gateway"
 
@@ -77,4 +77,4 @@ Upstreams:
 # Prometheus 指标
 Metrics:
   Enabled: true
-  Path: /metrics
+  Path: /api/v1/metrics
