@@ -12,9 +12,9 @@ import (
 
 const (
 	// PriorityZSetSuffix 优先级 ZSet 后缀
-	PriorityZSetSuffix = "priority"
+	PriorityZSetSuffix = ":priority"
 	// TaskCacheSuffix 任务缓存KV后缀，用于快速查询任务数据
-	TaskCacheSuffix = "task"
+	TaskCacheSuffix = ":task:"
 )
 
 type TaskQueue struct {
@@ -22,14 +22,18 @@ type TaskQueue struct {
 	streamKey       string
 	group           string
 	priorityZSetKey string // Redis ZSet key（优先级排序，score核心）
+	cacheKey        string // 任务缓存KV key，用于快速查询任务数据
 }
 
 func NewTaskQueue(client *redis.Client, streamKey, group string) *TaskQueue {
+	// HashTag 包裹，强制 Redis Cluster 同槽，事务100%安全
+	base := fmt.Sprintf("{%s}", streamKey)
 	return &TaskQueue{
 		client:          client,
-		streamKey:       streamKey,
+		streamKey:       base,
 		group:           group,
-		priorityZSetKey: fmt.Sprintf("%s:%s", streamKey, PriorityZSetSuffix),
+		priorityZSetKey: base + PriorityZSetSuffix,
+		cacheKey:        base + TaskCacheSuffix,
 	}
 }
 
@@ -74,8 +78,8 @@ func (q *TaskQueue) Push(ctx context.Context, taskID string, data []byte, priori
 		Member: taskID,
 	})
 	// 同时存一份 kv(用于快速查询)
-	key := fmt.Sprintf("%s:%s:%s", q.streamKey, TaskCacheSuffix, taskID)
-	q.client.Set(ctx, key, string(data), 24*time.Hour)
+	cacheKey := q.cacheKey + taskID
+	q.client.Set(ctx, cacheKey, data, 24*time.Hour)
 
 	// 执行事务
 	_, err := tx.Exec(ctx)
@@ -202,8 +206,8 @@ func (q *TaskQueue) ackAndRemove(ctx context.Context, msgID string, taskID strin
 	tx.XAck(ctx, q.streamKey, q.group, msgID)
 	tx.ZRem(ctx, q.priorityZSetKey, taskID)
 	// 同时删除缓存
-	key := fmt.Sprintf("%s:%s:%s", q.streamKey, TaskCacheSuffix, taskID)
-	tx.Del(ctx, key)
+	cacheKey := q.cacheKey + taskID
+	tx.Del(ctx, cacheKey)
 	// 执行事务
 	_, err := tx.Exec(ctx)
 	if err != nil {
@@ -214,7 +218,7 @@ func (q *TaskQueue) ackAndRemove(ctx context.Context, msgID string, taskID strin
 
 // GetTask 查询任务数据（从缓存）
 func (q *TaskQueue) GetTask(ctx context.Context, taskID string) ([]byte, error) {
-	cacheKey := fmt.Sprintf("%s:%s:%s", q.streamKey, TaskCacheSuffix, taskID)
+	cacheKey := q.cacheKey + taskID
 	return q.client.Get(ctx, cacheKey).Bytes()
 }
 

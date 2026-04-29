@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/redis/go-redis/v9"
 	"github.com/zeromicro/go-zero/core/logx"
 	"time"
@@ -17,7 +18,8 @@ type DeadLetterQueue struct {
 }
 
 func NewDeadLetterQueue(client *redis.Client, baseStream string, group string) *DeadLetterQueue {
-	return &DeadLetterQueue{client, baseStream + DeadLetterStreamSuffix, group}
+	tag := fmt.Sprintf("{%s}", baseStream)
+	return &DeadLetterQueue{client, tag + DeadLetterStreamSuffix, group}
 }
 
 // Init 初始化消费者组（幂等）
