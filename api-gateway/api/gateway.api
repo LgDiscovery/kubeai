@@ -72,47 +72,6 @@ service gateway {
 	post /register (RegisterRequest) returns (RegisterResponse)
 }
 
-// 需鉴权的业务服务（模型管理、任务调度、推理）
-// 通过中间件 AuthMiddleware 进行 JWT 校验
-@server (
-	prefix:     "/api/v1"
-	group:      "business"
-	middleware: CorsMiddleware,AuthMiddleware,RateLimitMiddleware,MetricsMiddleware
-)
-service gateway {
-	// 模型管理
-	@doc (
-		title: "模型管理"
-		desc:  "模型管理接口"
-	)
-	@handler ProxyModelHandler
-	post /models/:any
-
-	// 任务调度
-	@doc (
-		title: "任务调度"
-		desc:  "任务调度接口"
-	)
-	@handler ProxyJobHandler
-	post /jobs/:any
-
-	// 推理服务
-	@doc (
-		title: "推理服务"
-		desc:  "推理服务接口"
-	)
-	@handler ProxyInferenceHandler
-	post /inference/:any
-
-	// 可关测平台
-	@doc (
-		title: "可关测平台"
-		desc:  "可关测平台接口"
-	)
-	@handler ProxyObserverHandler
-	post /observer/:any
-}
-
 // 指标暴露（无需鉴权）
 @server (
 	prefix: /api/v1

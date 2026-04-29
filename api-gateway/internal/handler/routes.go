@@ -7,7 +7,6 @@ import (
 	"net/http"
 
 	auth "kubeai-api-gateway/internal/handler/auth"
-	business "kubeai-api-gateway/internal/handler/business"
 	metrics "kubeai-api-gateway/internal/handler/metrics"
 	"kubeai-api-gateway/internal/svc"
 
@@ -32,35 +31,6 @@ func RegisterHandlers(server *rest.Server, serverCtx *svc.ServiceContext) {
 			}...,
 		),
 		rest.WithPrefix("/api/v1/auth"),
-	)
-
-	server.AddRoutes(
-		rest.WithMiddlewares(
-			[]rest.Middleware{serverCtx.CorsMiddleware, serverCtx.AuthMiddleware, serverCtx.RateLimitMiddleware, serverCtx.MetricsMiddleware},
-			[]rest.Route{
-				{
-					Method:  http.MethodPost,
-					Path:    "/inference/:any",
-					Handler: business.ProxyInferenceHandler(serverCtx),
-				},
-				{
-					Method:  http.MethodPost,
-					Path:    "/jobs/:any",
-					Handler: business.ProxyJobHandler(serverCtx),
-				},
-				{
-					Method:  http.MethodPost,
-					Path:    "/models/:any",
-					Handler: business.ProxyModelHandler(serverCtx),
-				},
-				{
-					Method:  http.MethodPost,
-					Path:    "/observer/:any",
-					Handler: business.ProxyObserverHandler(serverCtx),
-				},
-			}...,
-		),
-		rest.WithPrefix("/api/v1"),
 	)
 
 	server.AddRoutes(

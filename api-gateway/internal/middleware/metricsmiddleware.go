@@ -7,6 +7,7 @@ import (
 	"kubeai-api-gateway/pkg/metrics"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -33,8 +34,21 @@ func (m *MetricsMiddleware) Handle(next http.HandlerFunc) http.HandlerFunc {
 		duration := time.Since(start).Seconds()
 		status := strconv.Itoa(wrapped.status)
 
-		metrics.RequestTotal.WithLabelValues(method, path, status, "model-manager").Inc()
-		metrics.RequestDuration.WithLabelValues(method, path, "model-manager").Observe(duration)
+		service := "unknown"
+
+		// 自动识别服务分组（精准标记 /inference 接口）
+		if strings.HasPrefix(path, "/api/v1/inference") {
+			service = "inference" // 推理接口专用标识
+		} else if strings.HasPrefix(path, "/api/v1/models") {
+			service = "models"
+		} else if strings.HasPrefix(path, "/api/v1/jobs") {
+			service = "jobs"
+		} else if strings.HasPrefix(path, "/api/v1/observer") {
+			service = "observer"
+		}
+
+		metrics.RequestTotal.WithLabelValues(method, path, status, service).Inc()
+		metrics.RequestDuration.WithLabelValues(method, path, service).Observe(duration)
 	}
 }
 

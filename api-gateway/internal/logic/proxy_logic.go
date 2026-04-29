@@ -33,7 +33,7 @@ func (l *ProxyLogic) ProxyRequest(w http.ResponseWriter, r *http.Request) error 
 		targetHost, err = l.svcCtx.Discovery.GetTaskSchedulerEndpoint()
 	case strings.HasPrefix(path, "/api/v1/inference"):
 		targetHost, err = l.svcCtx.Discovery.GetInferenceGatewayEndpoint()
-	case strings.HasPrefix(path, "/api/v1/observability"):
+	case strings.HasPrefix(path, "/api/v1/observer"):
 		targetHost, err = l.svcCtx.Discovery.GetObservabilityGatewayEndpoint()
 	default:
 		return fmt.Errorf("no upstream found for path: %s", path)
