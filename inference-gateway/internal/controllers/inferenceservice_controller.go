@@ -15,6 +15,7 @@ import (
 	modelClient "kubeai-inference-gateway/internal/client"
 	"kubeai-inference-gateway/internal/model"
 	"kubeai-inference-gateway/internal/resources"
+	"kubeai-inference-gateway/pkg/metrics"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -159,6 +160,9 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	isvc.Status.Ready = true
 	isvc.Status.URL = fmt.Sprintf("http://%s.%s.svc.cluster.local", isvc.Name, isvc.Namespace)
+
+	// Update metrics
+	r.updateMetrics(isvc)
 
 	// 10. 更新 Status
 	if err := r.updateStatus(ctx, isvc); err != nil {
@@ -354,4 +358,18 @@ func (r *InferenceServiceReconciler) cleanupCanaryResources(ctx context.Context,
 	}
 	err := r.Delete(ctx, dep)
 	return client.IgnoreNotFound(err)
+}
+
+func (r *InferenceServiceReconciler) updateMetrics(isvc *aiv1.InferenceService) {
+	metrics.InferenceReplicas.WithLabelValues(
+		isvc.Spec.ModelName,
+		isvc.Spec.ModelVersion,
+		isvc.Name,
+	).Set(float64(isvc.Status.ReadyReplicas))
+	if isvc.Spec.Canary != nil && isvc.Spec.Canary.Enabled {
+		metrics.InferenceReplicas.WithLabelValues(
+			isvc.Spec.ModelName,
+			isvc.Spec.ModelVersion,
+			fmt.Sprintf("%s-canary", isvc.Name))
+	}
 }

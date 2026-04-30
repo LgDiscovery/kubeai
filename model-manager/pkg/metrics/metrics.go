@@ -3,6 +3,7 @@ package metrics
 import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
 var (
@@ -37,3 +38,8 @@ var (
 		Buckets: prometheus.DefBuckets,
 	}, []string{"method", "path", "service"})
 )
+
+func init() {
+	metrics.Registry.MustRegister(ModelTotal, ModelVersionTotal,
+		ModelHealthStatus, RequestTotal, RequestDuration)
+}
