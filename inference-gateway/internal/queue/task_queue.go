@@ -18,14 +18,14 @@ const (
 )
 
 type TaskQueue struct {
-	client          *redis.Client
+	client          *redis.ClusterClient
 	streamKey       string
 	group           string
 	priorityZSetKey string // Redis ZSet key（优先级排序，score核心）
 	cacheKey        string // 任务缓存KV key，用于快速查询任务数据
 }
 
-func NewTaskQueue(client *redis.Client, streamKey, group string) *TaskQueue {
+func NewTaskQueue(client *redis.ClusterClient, streamKey, group string) *TaskQueue {
 	// HashTag 包裹，强制 Redis Cluster 同槽，事务100%安全
 	base := fmt.Sprintf("{%s}", streamKey)
 	return &TaskQueue{
@@ -79,7 +79,7 @@ func (q *TaskQueue) Push(ctx context.Context, taskID string, data []byte, priori
 	})
 	// 同时存一份 kv(用于快速查询)
 	cacheKey := q.cacheKey + taskID
-	q.client.Set(ctx, cacheKey, data, 24*time.Hour)
+	tx.Set(ctx, cacheKey, data, 24*time.Hour)
 
 	// 执行事务
 	_, err := tx.Exec(ctx)
@@ -223,6 +223,6 @@ func (q *TaskQueue) GetTask(ctx context.Context, taskID string) ([]byte, error) 
 }
 
 // DeleteTask 手动删除任务
-func (q *TaskQueue) DeleteTask(ctx context.Context, taskID string) {
-	q.ackAndRemove(ctx, "", taskID)
+func (q *TaskQueue) DeleteTask(ctx context.Context, msgID, taskID string) {
+	q.ackAndRemove(ctx, msgID, taskID)
 }

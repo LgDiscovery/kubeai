@@ -38,4 +38,4 @@ Log:
 # 指标
 Metrics:
   Enabled: true
-  Path: "/api/v1/metrics"
+  Path: "/api/v1/models/metrics"

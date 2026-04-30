@@ -26,11 +26,10 @@ helm install minio oci://registry-1.docker.io/bitnamicharts/minio \
   --set defaultBucket.name=models
 ```
 
-
 ### 1.4 部署Redis 任务队列、缓存 分布式锁
 
 ```shell
-helm install redis oci://registry-1.docker.io/bitnamicharts/redis \
+helm install redis oci://registry-1.docker.io/bitnamicharts/redis-cluster \
   --namespace kubeai \
   --set auth.password=redis123
 ```

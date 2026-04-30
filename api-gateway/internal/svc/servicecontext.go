@@ -84,7 +84,7 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	}
 
 	// 2. 初始化Redis客户端 分布式限流
-	redisClient, err := redis.NewRedis(c.RedisConf)
+	redisClient, err := redis.NewRedis(c.Redis)
 	if err != nil {
 		logx.Errorf("init redis client for rate limit failed: %v", err)
 	}

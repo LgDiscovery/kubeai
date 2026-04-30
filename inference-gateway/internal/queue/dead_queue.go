@@ -12,12 +12,12 @@ import (
 const DeadLetterStreamSuffix = ":dead"
 
 type DeadLetterQueue struct {
-	client    *redis.Client
+	client    *redis.ClusterClient
 	streamKey string
 	group     string
 }
 
-func NewDeadLetterQueue(client *redis.Client, baseStream string, group string) *DeadLetterQueue {
+func NewDeadLetterQueue(client *redis.ClusterClient, baseStream string, group string) *DeadLetterQueue {
 	tag := fmt.Sprintf("{%s}", baseStream)
 	return &DeadLetterQueue{client, tag + DeadLetterStreamSuffix, group}
 }

@@ -20,6 +20,7 @@ import (
 	"kubeai-job-scheduler/internal/repo"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"kubeai-job-scheduler/internal/config"
@@ -29,7 +30,7 @@ import (
 
 type ServiceContext struct {
 	Config             config.Config
-	RedisClient        *redis.Client
+	RedisClient        *redis.ClusterClient
 	ModelManagerClient *client.ModelManagerClient
 	DB                 *gorm.DB
 	K8sClient          *kubernetes.Clientset
@@ -79,10 +80,11 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	trainingTaskRepo := repo.NewTrainingTaskRepo(db)
 
 	// Redis
-	rdb := redis.NewClient(&redis.Options{
-		Addr:     c.Redis.Addr,
-		Password: c.Redis.Password,
-		DB:       c.Redis.DB,
+	rdb := redis.NewClusterClient(&redis.ClusterOptions{
+		Addrs:     strings.Split(c.Redis.RedisConf.Host, ","),
+		Password:  c.Redis.RedisConf.Pass,
+		Username:  c.Redis.RedisConf.User,
+		TLSConfig: nil,
 	})
 	if err := rdb.Ping(context.Background()).Err(); err != nil {
 		logx.Must(err)

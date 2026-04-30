@@ -5,6 +5,7 @@ package config
 
 import (
 	"github.com/zeromicro/go-zero/core/discov"
+	"github.com/zeromicro/go-zero/core/stores/redis"
 	"github.com/zeromicro/go-zero/rest"
 	"time"
 )
@@ -22,9 +23,7 @@ type Config struct {
 }
 
 type RedisConfig struct {
-	Addr          string
-	Password      string
-	DB            int
+	RedisConf     redis.RedisConf
 	Streams       StreamsConfig
 	ConsumerGroup string
 	MaxRetries    int

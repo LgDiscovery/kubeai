@@ -8,7 +8,7 @@ import (
 // HotConfig 可通过 etcd 热更新的配置项
 type HotConfig struct {
 	Database  DatabaseConfig  `mapstructure:"database" json:"database"`
-	RedisConf redis.RedisConf `mapstructure:"redisConf" json:"redisConf"`
+	Redis     redis.RedisConf `mapstructure:"redis" json:"redis"`
 	RateLimit RateLimit       `mapstructure:"rateLimit" json:"rateLimit"`
 	Auth      Auth            `mapstructure:"auth" json:"auth"`
 	Upstreams Upstreams       `mapstructure:"upstreams" json:"upstreams"`

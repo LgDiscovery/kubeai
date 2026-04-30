@@ -8,14 +8,22 @@ Etcd:
   Key: "kubeai.services.inference-gateway"
 
 Redis:
-  Addr: "redis.kubeai.svc.cluster.local:6379"
-  Password: "redis123"
-  DB: 0
+  RedisConf:
+    Host: "redis-redis-cluster-0.redis-redis-cluster-headless.kubeai.svc.cluster.local:6379,redis-redis-cluster-1.redis-redis-cluster-headless.kubeai.svc.cluster.local:6379,redis-redis-cluster-2.redis-redis-cluster-headless.kubeai.svc.cluster.local:6379"
+    Type: cluster
+    User: "redis"
+    Pass: "redis123"
+    Tls: false
+    NonBlock: true
+    PingTimeout: 1s
   Streams:
     Inference: "kubeai:inference:task"
     Training: "kubeai:training:task"
     DeadLetter: "kubeai:deadLetter:task"
   ConsumerGroup: "inference-gateway"
+  MaxRetries: 3
+  Expiration: 24h
+  RetryBackoff: 1000 #ms
 
 # 数据库配置
 Database:

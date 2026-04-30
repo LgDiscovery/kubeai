@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"strings"
 	"time"
 )
 
@@ -45,7 +46,7 @@ func init() {
 
 type ServiceContext struct {
 	Config            config.Config                   // 配置文件
-	RedisClient       *redis.Client                   // Redis 客户端
+	RedisClient       *redis.ClusterClient            // Redis 客户端
 	DB                *gorm.DB                        // 数据库连接
 	K8sClient         *kubernetes.Clientset           // K8s 原生客户端
 	DynamicClient     dynamic.Interface               // K8s 动态客户端
@@ -95,10 +96,11 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	trainingRepo := repo.NewTrainingTaskRepo(db)
 
 	// Redis
-	rdb := redis.NewClient(&redis.Options{
-		Addr:     c.Redis.Addr,
-		Password: c.Redis.Password,
-		DB:       c.Redis.DB,
+	var rdb = redis.NewClusterClient(&redis.ClusterOptions{
+		Addrs:     strings.Split(c.Redis.RedisConf.Host, ","),
+		Password:  c.Redis.RedisConf.Pass,
+		Username:  c.Redis.RedisConf.User,
+		TLSConfig: nil,
 	})
 	if err := rdb.Ping(context.Background()).Err(); err != nil {
 		logx.Must(err)

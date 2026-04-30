@@ -18,14 +18,14 @@ const (
 )
 
 type TaskQueue struct {
-	client          *redis.Client
+	client          *redis.ClusterClient
 	streamKey       string
 	group           string
 	priorityZSetKey string // Redis ZSet key（优先级排序，score核心）
 	cacheKey        string // 任务缓存KV key，用于快速查询任务数据
 }
 
-func NewTaskQueue(client *redis.Client, streamKey, group string) *TaskQueue {
+func NewTaskQueue(client *redis.ClusterClient, streamKey, group string) *TaskQueue {
 	// HashTag 包裹，强制 Redis Cluster 同槽，事务100%安全
 	base := fmt.Sprintf("{%s}", streamKey)
 	return &TaskQueue{

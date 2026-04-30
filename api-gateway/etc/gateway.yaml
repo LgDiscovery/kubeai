@@ -52,10 +52,14 @@ Auth:
   
 # Redis配置（分布式限流必须）
 Redis:
-  Host: 127.0.0.1
-  Port: 6379
+  Host: "redis-redis-cluster-0.redis-redis-cluster-headless.kubeai.svc.cluster.local:6379,redis-redis-cluster-1.redis-redis-cluster-headless.kubeai.svc.cluster.local:6379,redis-redis-cluster-2.redis-redis-cluster-headless.kubeai.svc.cluster.local:6379"
+  Type: cluster
+  User: "redis"
   Pass: "redis123"
-  Db: 0
+  Tls: false
+  NonBlock: true
+  PingTimeout: 5s
+
 # 限流配置
 RateLimit:
   Enabled: true

@@ -13,7 +13,7 @@ type Config struct {
 	rest.RestConf
 	Etcd      EtcdConf        `json:",optional"`
 	Database  DatabaseConfig  `mapstructure:"database" json:"database"`
-	RedisConf redis.RedisConf `mapstructure:"redisConf" json:"redisConf"`
+	Redis     redis.RedisConf `mapstructure:"redis" json:"redis"`
 	RateLimit RateLimit       `mapstructure:"rateLimit" json:"rateLimit"`
 	Auth      Auth            `mapstructure:"auth" json:"auth"`
 	Upstreams Upstreams       `mapstructure:"upstreams" json:"upstreams"`
