@@ -16,7 +16,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	fiv1 "kubeai-inference-gateway/inferenceservice/api/v1"
-	modelClient "kubeai-inference-gateway/internal/client"
+	callbackClient "kubeai-inference-gateway/internal/client"
 	"kubeai-inference-gateway/internal/config"
 	"kubeai-inference-gateway/internal/help"
 	"kubeai-inference-gateway/internal/middleware"
@@ -45,22 +45,23 @@ func init() {
 }
 
 type ServiceContext struct {
-	Config            config.Config                   // 配置文件
-	RedisClient       *redis.ClusterClient            // Redis 客户端
-	DB                *gorm.DB                        // 数据库连接
-	K8sClient         *kubernetes.Clientset           // K8s 原生客户端
-	DynamicClient     dynamic.Interface               // K8s 动态客户端
-	CtrlClient        client.Client                   // controller-runtime 客户端
-	ModelMgrClient    *modelClient.ModelManagerClient // 模型管理服务客户端
-	InferenceQueue    *queue.TaskQueue                // 推理任务队列
-	TrainingQueue     *queue.TaskQueue                // 训练任务队列
-	MetricsMiddleware rest.Middleware                 // 监控指标中间件
-	Mgr               manager.Manager                 // K8s Operator Manager
-	ResourceTracker   *scheduler.ResourceTracker      // 资源跟踪器
-	PlacementStrategy scheduler.PlacementStrategy     // 节点选择策略
-	DeadLetterQueue   *queue.DeadLetterQueue          // 死信队列
-	InferenceTaskRepo *repo.InferenceTaskRepo         // 推理任务 Repository
-	TrainingTaskRepo  *repo.TrainingTaskRepo          // 训练任务 Repository
+	Config            config.Config                      // 配置文件
+	RedisClient       *redis.ClusterClient               // Redis 客户端
+	DB                *gorm.DB                           // 数据库连接
+	K8sClient         *kubernetes.Clientset              // K8s 原生客户端
+	DynamicClient     dynamic.Interface                  // K8s 动态客户端
+	CtrlClient        client.Client                      // controller-runtime 客户端
+	ModelMgrClient    *callbackClient.ModelManagerClient // 模型管理服务客户端
+	JobScheduleClient *callbackClient.JobScheduleClient  // 任务调度器服务客户端
+	InferenceQueue    *queue.TaskQueue                   // 推理任务队列
+	TrainingQueue     *queue.TaskQueue                   // 训练任务队列
+	MetricsMiddleware rest.Middleware                    // 监控指标中间件
+	Mgr               manager.Manager                    // K8s Operator Manager
+	ResourceTracker   *scheduler.ResourceTracker         // 资源跟踪器
+	PlacementStrategy scheduler.PlacementStrategy        // 节点选择策略
+	DeadLetterQueue   *queue.DeadLetterQueue             // 死信队列
+	InferenceTaskRepo *repo.InferenceTaskRepo            // 推理任务 Repository
+	TrainingTaskRepo  *repo.TrainingTaskRepo             // 训练任务 Repository
 }
 
 func NewServiceContext(c config.Config) *ServiceContext {
@@ -132,8 +133,9 @@ func NewServiceContext(c config.Config) *ServiceContext {
 		logx.Must(err)
 	}
 
-	// ModelManager client
-	modelClient := modelClient.NewModelManagerClient(c.ModelManager.URL, c.ModelManager.Timeout)
+	// callback client
+	modelClient := callbackClient.NewModelManagerClient(c.ModelManager.URL, c.ModelManager.Timeout)
+	jobScheduleClient := callbackClient.NewJobScheduleClient(c.JobSchedule.URL, c.JobSchedule.Timeout)
 
 	// Queues
 	inferenceQueue := queue.NewTaskQueue(rdb, c.Redis.Streams.Inference, c.Redis.ConsumerGroup)
@@ -141,9 +143,6 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	deadLetterQueue := queue.NewDeadLetterQueue(rdb, c.Redis.Streams.DeadLetter, c.Redis.ConsumerGroup)
 
 	metricsMiddleware := middleware.NewMetricsMiddleware().Handle
-
-	// Resource Tracker
-	resourceTracker := scheduler.NewResourceTracker(k8sClient, c.K8s.Namespace, c.ResourceSync.Interval)
 
 	// Placement Strategy
 	var strategy scheduler.PlacementStrategy
@@ -164,6 +163,9 @@ func NewServiceContext(c config.Config) *ServiceContext {
 		strategy = scheduler.NewBinpackStrategy(c.Scheduler.EnableGPUPacking, c.Scheduler.GPUBinpackWeight)
 	}
 
+	// Resource Tracker
+	resourceTracker := scheduler.NewResourceTracker(k8sClient, c.K8s.Namespace, c.ResourceSync.Interval, strategy)
+
 	return &ServiceContext{
 		Config:            c,
 		RedisClient:       rdb,
@@ -172,6 +174,7 @@ func NewServiceContext(c config.Config) *ServiceContext {
 		DynamicClient:     dynamicClient,
 		CtrlClient:        mgr.GetClient(),
 		ModelMgrClient:    modelClient,
+		JobScheduleClient: jobScheduleClient,
 		InferenceQueue:    inferenceQueue,
 		TrainingQueue:     trainingQueue,
 		DeadLetterQueue:   deadLetterQueue,

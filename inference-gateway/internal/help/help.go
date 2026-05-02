@@ -53,3 +53,27 @@ func LoadKubeConfig() (*rest.Config, error) {
 	kubeConfigPath := filepath.Join(home, ".kube", "config")
 	return clientcmd.BuildConfigFromFlags("", kubeConfigPath)
 }
+
+func ContainsString(slice []string, s string) bool {
+	for _, item := range slice {
+		if item == s {
+			return true
+		}
+	}
+	return false
+}
+
+func RemoveString(slice []string, s string) []string {
+	newSlice := make([]string, 0, len(slice))
+	for _, item := range slice {
+		if item != s {
+			newSlice = append(newSlice, item)
+		}
+	}
+	return newSlice
+}
+
+// Ptr Ptr工具函数： 创建指针
+func Ptr[T any](v T) *T {
+	return &v
+}

@@ -96,6 +96,11 @@ func RegisterHandlers(server *rest.Server, serverCtx *svc.ServiceContext) {
 				},
 				{
 					Method:  http.MethodPost,
+					Path:    "/models/register",
+					Handler: model.RegisterModelHandler(serverCtx),
+				},
+				{
+					Method:  http.MethodPost,
 					Path:    "/models/version/status",
 					Handler: model.UpdateVersionStatusHandler(serverCtx),
 				},

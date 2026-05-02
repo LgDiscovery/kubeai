@@ -26,9 +26,11 @@ import (
 
 type InferenceServiceReconciler struct {
 	client.Client
-	Scheme           *runtime.Scheme
-	ModelManagerAddr string                          // 模型服务地址
-	ModelClient      *modelClient.ModelManagerClient //客户端实例
+	Scheme            *runtime.Scheme
+	ModelManagerAddr  string                          // 模型服务地址
+	JobScheduleAddr   string                          // 任务调度服务地址
+	ModelClient       *modelClient.ModelManagerClient //客户端实例
+	JobScheduleClient *modelClient.JobScheduleClient  //客户端实例
 }
 
 //+kubebuilder:rbac:groups=ai.kubeai.io,resources=inferenceservices,verbs=get;list;watch;create;update;patch;delete
@@ -70,7 +72,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// 如果模型是自定义镜像,否则用默认推理镜像+模型挂载路径
 	if r.ModelClient != nil && isvc.Spec.Image == "" {
-		modelMeta, err := r.ModelClient.GetModelMetadata(isvc.Spec.ModelName, isvc.Spec.ModelVersion)
+		modelMeta, err := r.ModelClient.GetModelMetadata(ctx, isvc.Spec.ModelName, isvc.Spec.ModelVersion)
 		if err != nil {
 			log.Error(err, "unable to fetch model metadata", "ModelName", isvc.Spec.ModelName)
 			// 更新 CR 状态为 "ModelNotReady"

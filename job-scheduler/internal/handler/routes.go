@@ -50,6 +50,11 @@ func RegisterHandlers(server *rest.Server, serverCtx *svc.ServiceContext) {
 					Handler: job_scheduler.GetInferenceTaskHandler(serverCtx),
 				},
 				{
+					Method:  http.MethodPost,
+					Path:    "/tasks/callback",
+					Handler: job_scheduler.CallBackTaskStatusHandler(serverCtx),
+				},
+				{
 					Method:  http.MethodGet,
 					Path:    "/tasks/list",
 					Handler: job_scheduler.ListTasksHandler(serverCtx),

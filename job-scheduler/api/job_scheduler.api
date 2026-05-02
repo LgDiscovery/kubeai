@@ -70,6 +70,7 @@ type (
 		ErrorMessage string          `json:"error_message,optional"`
 	}
 	SubmitTrainingReq {
+		RequestID     string          `json:"request_id"`
 		Name          string          `json:"name"`
 		ModelName     string          `json:"model_name,optional"`
 		Framework     string          `json:"framework"`
@@ -108,6 +109,12 @@ type (
 		Page     int           `json:"page"`
 		PageSize int           `json:"page_size"`
 	}
+	CallBackTaskStatusReq {
+		TaskID   string `json:"task_id"`
+		Name     string `json:"name"`
+		Status   string `json:"status"`
+		TaskType string `json:"task_type,options=inference|training"`
+	}
 	// 通用响应
 	CommonResp {
 		Code    int         `json:"code"`
@@ -143,6 +150,10 @@ service job_scheduler {
 	// 任务列表
 	@handler ListTasksHandler
 	get /tasks/list (ListTasksReq) returns (ListTasksResp)
+
+	// 回调任务状态
+	@handler CallBackTaskStatusHandler
+	post /tasks/callback (CallBackTaskStatusReq) returns (CommonResp)
 }
 
 @server (

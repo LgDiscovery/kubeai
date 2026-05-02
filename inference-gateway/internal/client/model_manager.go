@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -46,6 +47,28 @@ type Model struct {
 	Versions    []ModelVersion `json:"versions,optional"`
 }
 
+// ModelRegisterRequest 模型注册请求结构体
+type ModelRegisterRequest struct {
+	ModelName       string            `json:"model_name"`
+	StoragePath     string            `json:"storage_path"`
+	Framework       string            `json:"framework"`
+	Version         string            `json:"version"`
+	TaskType        string            `json:"task_type,omitempty"`
+	Description     string            `json:"description,omitempty"`
+	Metadata        map[string]string `json:"metadata,omitempty"`
+	TrainingJobName string            `json:"training_job_name,omitempty"`
+	Namespace       string            `json:"namespace,omitempty"`
+	ModelID         string            `json:"model_id,omitempty"`
+}
+
+// ModelRegisterResponse 对齐 model-manager 接口的响应结构体
+type ModelRegisterResponse struct {
+	ModelID string `json:"model_id"`
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+	Version string `json:"version,omitempty"`
+}
+
 func (c *ModelManagerClient) GetModel(ctx context.Context, modelName string) (*Model, error) {
 	url := fmt.Sprintf("%s/api/v1/models/%s", c.baseURL, modelName)
 	httpResp, err := c.httpClient.Get(url)
@@ -63,11 +86,7 @@ func (c *ModelManagerClient) GetModel(ctx context.Context, modelName string) (*M
 // CheckModelAvailable 校验模型是否可用，返回模型版本信息
 func (c *ModelManagerClient) CheckModelAvailable(ctx context.Context, modelName, version string) (*ModelVersion, error) {
 	url := fmt.Sprintf("%s/api/v1/models/%s/versions/%s", c.baseURL, modelName, version)
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.httpClient.Get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -93,11 +112,7 @@ func (c *ModelManagerClient) CheckModelAvailable(ctx context.Context, modelName,
 // GetModelDownloadURL 获取模型下载预签名 URL（用于传递给推理 Pod）
 func (c *ModelManagerClient) GetModelDownloadURL(ctx context.Context, modelName, version string) (string, error) {
 	url := fmt.Sprintf("%s/api/v1/models/%s/versions/%s/download?presigned=true", c.baseURL, modelName, version)
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return "", err
-	}
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.httpClient.Get(url)
 	if err != nil {
 		return "", err
 	}
@@ -125,13 +140,9 @@ type ModelMetadata struct {
 }
 
 // GetModelMetadata GetModel fetches the model metadata
-func (c *ModelManagerClient) GetModelMetadata(modelName, modelVersion string) (*ModelMetadata, error) {
+func (c *ModelManagerClient) GetModelMetadata(ctx context.Context, modelName, modelVersion string) (*ModelMetadata, error) {
 	url := fmt.Sprintf("%s/api/v1/models/%s/versions/%s/metadata", c.baseURL, modelName, modelVersion)
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("unable to create request: %w", err)
-	}
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.httpClient.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call model manager: %w", err)
 	}
@@ -145,4 +156,25 @@ func (c *ModelManagerClient) GetModelMetadata(modelName, modelVersion string) (*
 		return nil, fmt.Errorf("failed to decode model metadata: %w", err)
 	}
 	return &modelMetadata, nil
+}
+
+func (c *ModelManagerClient) RegisterModel(ctx context.Context, registerRequest *ModelRegisterRequest) (*ModelRegisterResponse, error) {
+	url := fmt.Sprintf("%s/api/v1/models/register", c.baseURL)
+	registerRequestJSON, err := json.Marshal(registerRequest)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal register request: %w", err)
+	}
+	resp, err := c.httpClient.Post(url, "application/json", bytes.NewBuffer(registerRequestJSON))
+	if err != nil {
+		return nil, fmt.Errorf("failed to call model manager: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to call model manager: invalid status code: %d", resp.StatusCode)
+	}
+	var modelRegisterResponse ModelRegisterResponse
+	if err := json.NewDecoder(resp.Body).Decode(&modelRegisterResponse); err != nil {
+		return nil, fmt.Errorf("failed to decode model register response: %w", err)
+	}
+	return &modelRegisterResponse, nil
 }

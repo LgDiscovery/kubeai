@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"errors"
+	"fmt"
 	"gorm.io/gorm"
 	"kubeai-job-scheduler/internal/model"
 )
@@ -52,4 +53,14 @@ func (r *InferenceTaskRepo) List(ctx context.Context, status string, offset, lim
 		return nil, 0, err
 	}
 	return tasks, total, nil
+}
+
+func (r *InferenceTaskRepo) CallbackStatus(ctx context.Context, taskID string, status model.TaskStatus) error {
+	var task model.InferenceTask
+	err := r.db.WithContext(ctx).Where("task_id = ?", taskID).First(&task).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return fmt.Errorf("task not found")
+	}
+	task.Status = status
+	return r.db.WithContext(ctx).Save(&task).Error
 }

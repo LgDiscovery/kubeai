@@ -1,0 +1,119 @@
+# kube-prometheus-stack 定制配置
+prometheus:
+  prometheusSpec:
+    # 保留数据 15 天
+    retention: 15d
+    retentionSize: 20GB
+    # 存储卷
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 50Gi
+    # ServiceMonitor 选择器（匹配各服务的 ServiceMonitor）
+    serviceMonitorSelector:
+      matchLabels:
+        kubeai: monitoring
+    # 远程写入（可选，用于长期存储）
+    remoteWrite: []
+    # 外部标签
+    externalLabels:
+      cluster: kubeai-platform
+    # 资源配置
+    resources:
+      requests:
+        cpu: 500m
+        memory: 2Gi
+      limits:
+        cpu: 2000m
+        memory: 4Gi
+
+# Grafana 配置
+grafana:
+  enabled: true
+  # 管理员密码
+  adminPassword: "kubeai@2024"
+  # 持久化存储
+  persistence:
+    enabled: true
+    size: 10Gi
+  # 服务暴露（生产建议使用 Ingress）
+  service:
+    type: LoadBalancer
+    port: 80
+  # 预置数据源
+  additionalDataSources:
+    - name: Prometheus
+      type: prometheus
+      url: http://kube-prometheus-prometheus.monitoring:9090
+      access: proxy
+      isDefault: true
+    - name: Loki
+      type: loki
+      url: http://loki.monitoring:3100
+      access: proxy
+  # 预置仪表盘（从 ConfigMap 加载）
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: 'kubeai'
+          orgId: 1
+          folder: 'KubeAI'
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/kubeai
+  dashboards:
+    default:
+      kubeai-global:
+        file: dashboards/kubeai-global.json
+      kubeai-model-manager:
+        file: dashboards/kubeai-model-manager.json
+      kubeai-inference:
+        file: dashboards/kubeai-inference.json
+      kubeai-scheduler:
+        file: dashboards/kubeai-scheduler.json
+      kubeai-cluster:
+        file: dashboards/kubeai-cluster.json
+
+# AlertManager 配置
+alertmanager:
+  enabled: true
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      group_by: ['alertname', 'severity']
+      group_wait: 10s
+      group_interval: 10s
+      repeat_interval: 12h
+      receiver: 'default'
+      routes:
+        - match:
+            severity: critical
+          receiver: 'critical'
+    receivers:
+      - name: 'default'
+        webhook_configs:
+          - url: 'http://alert-webhook.kubeai.svc.cluster.local:68080/webhook'
+      - name: 'critical'
+        webhook_configs:
+          - url: 'http://alert-webhook.kubeai.svc.cluster.local:68080/critical'
+    inhibit_rules:
+      - source_match:
+          severity: 'critical'
+        target_match:
+          severity: 'warning'
+        equal: ['alertname']
+
+# 默认规则禁用一些不必要告警
+defaultRules:
+  create: true
+  rules:
+    etcd: false
+    kubeScheduler: true
+    kubeControllerManager: true

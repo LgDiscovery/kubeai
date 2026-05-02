@@ -27,25 +27,49 @@ type NodeResourceInfo struct {
 	LastUpdateTime    time.Time
 }
 
-// ResourceTracker 实时同步集群算力状态
-type ResourceTracker struct {
-	client    *kubernetes.Clientset
-	namespace string
-	mu        sync.RWMutex
-	nodes     map[string]*NodeResourceInfo
-	stopCh    chan struct{}
-	interval  time.Duration
+// ResourceRequest 内部使用的资源需求（统一单位）
+type ResourceRequest struct {
+	CPUMilli     int64
+	MemoryBytes  int64
+	GPUCount     int64
+	ModelName    string // 用于亲和性调度
+	ModelVersion string
 }
 
-func NewResourceTracker(client *kubernetes.Clientset, namespace string, interval time.Duration) *ResourceTracker {
+// ReservedResource 预留资源记录
+type ReservedResource struct {
+	TaskID      string
+	CPUMilli    int64
+	MemoryBytes int64
+	GPUCount    int64
+	ReservedAt  time.Time
+	ExpiresAt   time.Time
+}
+
+// ResourceTracker 实时同步集群算力状态
+type ResourceTracker struct {
+	client            *kubernetes.Clientset
+	namespace         string
+	mu                sync.RWMutex
+	nodes             map[string]*NodeResourceInfo
+	reservedResources map[string]map[string]*ReservedResource // nodeName -> taskID -> ReservedResource
+	stopCh            chan struct{}
+	interval          time.Duration
+	defaultStrategy   PlacementStrategy
+}
+
+func NewResourceTracker(client *kubernetes.Clientset, namespace string, interval time.Duration, defaultStrategy PlacementStrategy) *ResourceTracker {
 	rt := &ResourceTracker{
-		client:    client,
-		namespace: namespace,
-		interval:  interval,
-		stopCh:    make(chan struct{}),
-		nodes:     make(map[string]*NodeResourceInfo),
+		client:            client,
+		namespace:         namespace,
+		interval:          interval,
+		stopCh:            make(chan struct{}),
+		nodes:             make(map[string]*NodeResourceInfo),
+		reservedResources: make(map[string]map[string]*ReservedResource),
+		defaultStrategy:   defaultStrategy,
 	}
 	go rt.run()
+	go rt.cleanupExpiredReservations() // 启动过期预留清理协程
 	return rt
 }
 
@@ -100,6 +124,18 @@ func (rt *ResourceTracker) sync() error {
 				info.RequestedGPU += getGPUCount(container.Resources.Requests)
 			}
 		}
+
+		// 2. 累加预留资源
+		rt.mu.RLock()
+		if reservations, ok := rt.reservedResources[node.Name]; ok {
+			for _, res := range reservations {
+				info.RequestedCPU += res.CPUMilli
+				info.RequestedMemory += res.MemoryBytes
+				info.RequestedGPU += res.GPUCount
+			}
+		}
+		rt.mu.RUnlock()
+		// 3. 计算可用资源
 		info.AvailableCPU = info.AllocatableCPU - info.RequestedCPU
 		info.AvailableMemory = info.AllocatableMemory - info.RequestedMemory
 		info.AvailableGPU = info.AllocatableGPU - info.RequestedGPU
@@ -150,13 +186,112 @@ func getGPUCount(rl corev1.ResourceList) int64 {
 	return 0
 }
 
-// ResourceRequest 内部使用的资源需求（统一单位）
-type ResourceRequest struct {
-	CPUMilli     int64
-	MemoryBytes  int64
-	GPUCount     int64
-	ModelName    string // 用于亲和性调度
-	ModelVersion string
+// FindFitNodeAndReserve 筛选节点并预留资源，【核心实现】
+func (rt *ResourceTracker) FindFitNodeAndReserve(req ResourceRequest, strategy PlacementStrategy, taskID string) (string, error) {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+
+	selectedStrategy := strategy
+	if selectedStrategy == nil {
+		selectedStrategy = rt.defaultStrategy
+	}
+
+	fitNodes := rt.getFitNodesLocked(req)
+	if len(fitNodes) == 0 {
+		return "", ErrInsufficientResource
+	}
+
+	selected := selectedStrategy.SelectNode(fitNodes, req)
+	nodeName := selected.Name
+
+	// 执行资源预留
+	reservation := &ReservedResource{
+		TaskID:      taskID,
+		CPUMilli:    req.CPUMilli,
+		MemoryBytes: req.MemoryBytes,
+		GPUCount:    req.GPUCount,
+		ReservedAt:  time.Now(),
+		ExpiresAt:   time.Now().Add(5 * time.Minute), // 预留5分钟过期
+	}
+
+	if _, ok := rt.reservedResources[nodeName]; !ok {
+		rt.reservedResources[nodeName] = make(map[string]*ReservedResource)
+	}
+	rt.reservedResources[nodeName][taskID] = reservation
+
+	logx.Infof("node reserve success, node: %s, task: %s, cpu: %dm, mem: %d, gpu: %d",
+		nodeName, taskID, req.CPUMilli, req.MemoryBytes, req.GPUCount)
+
+	return nodeName, nil
+}
+
+// ReleaseNodeReserve 释放节点预留资源
+func (rt *ResourceTracker) ReleaseNodeReserve(nodeName string, taskID string) error {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+
+	if nodeReservations, ok := rt.reservedResources[nodeName]; ok {
+		if res, ok := nodeReservations[taskID]; ok {
+			delete(nodeReservations, taskID)
+			logx.Infof("node reserve released, node: %s, task: %s, cpu: %dm, mem: %d, gpu: %d",
+				nodeName, taskID, res.CPUMilli, res.MemoryBytes, res.GPUCount)
+			// 如果该节点没有预留了，清理map
+			if len(nodeReservations) == 0 {
+				delete(rt.reservedResources, nodeName)
+			}
+			return nil
+		}
+	}
+
+	logx.Errorf("node reserve not found, node: %s, task: %s", nodeName, taskID)
+	return nil
+}
+
+// Stop 停止资源追踪
+func (rt *ResourceTracker) Stop() {
+	close(rt.stopCh)
+}
+
+// ==================== 内部辅助方法 ====================
+
+func (rt *ResourceTracker) getFitNodesLocked(req ResourceRequest) []*NodeResourceInfo {
+	nodes := make([]*NodeResourceInfo, 0, len(rt.nodes))
+	for _, node := range rt.nodes {
+		// 检查资源是否满足（包含预留后的可用资源）
+		if node.AvailableCPU < req.CPUMilli ||
+			node.AvailableMemory < req.MemoryBytes ||
+			node.AvailableGPU < req.GPUCount {
+			continue
+		}
+		nodes = append(nodes, node)
+	}
+	return nodes
+}
+
+func (rt *ResourceTracker) cleanupExpiredReservations() {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-rt.stopCh:
+			return
+		case <-ticker.C:
+			rt.mu.Lock()
+			now := time.Now()
+			for nodeName, reservations := range rt.reservedResources {
+				for taskID, res := range reservations {
+					if now.After(res.ExpiresAt) {
+						delete(reservations, taskID)
+						logx.Infof("cleanup expired reservation, node: %s, task: %s", nodeName, taskID)
+					}
+				}
+				if len(reservations) == 0 {
+					delete(rt.reservedResources, nodeName)
+				}
+			}
+			rt.mu.Unlock()
+		}
+	}
 }
 
 var ErrInsufficientResource = fmt.Errorf("insufficient resources in cluster")

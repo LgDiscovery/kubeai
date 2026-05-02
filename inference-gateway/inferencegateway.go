@@ -72,16 +72,22 @@ func main() {
 
 	// 注册控制器
 	if err := (&controllers.InferenceServiceReconciler{
-		Client:           ctx.Mgr.GetClient(),
-		Scheme:           ctx.Mgr.GetScheme(),
-		ModelManagerAddr: c.ModelManager.URL,
-		ModelClient:      ctx.ModelMgrClient,
+		Client:            ctx.Mgr.GetClient(),
+		Scheme:            ctx.Mgr.GetScheme(),
+		ModelManagerAddr:  c.ModelManager.URL,
+		JobScheduleAddr:   c.JobSchedule.URL,
+		ModelClient:       ctx.ModelMgrClient,
+		JobScheduleClient: ctx.JobScheduleClient,
 	}).SetupWithManager(ctx.Mgr); err != nil {
 		logx.Must(err)
 	}
 	if err := (&controllers.TrainingJobReconciler{
-		Client: ctx.Mgr.GetClient(),
-		Scheme: ctx.Mgr.GetScheme(),
+		Client:            ctx.Mgr.GetClient(),
+		Scheme:            ctx.Mgr.GetScheme(),
+		ModelManagerAddr:  c.ModelManager.URL,
+		JobScheduleAddr:   c.JobSchedule.URL,
+		ModelClient:       ctx.ModelMgrClient,
+		JobScheduleClient: ctx.JobScheduleClient,
 	}).SetupWithManager(ctx.Mgr); err != nil {
 		logx.Must(err)
 	}

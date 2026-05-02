@@ -19,12 +19,16 @@ package controller
 import (
 	"context"
 	"fmt"
+	"github.com/zeromicro/go-zero/core/logx"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	callbackClient "kubeai-inference-gateway/internal/client"
 	"kubeai-inference-gateway/internal/help"
+	"math"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -40,38 +44,119 @@ import (
 
 // 定义 ConditionType 常量（遵循 Kubernetes 惯例）
 const (
-	ConditionTypeJobReady     = "JobReady"     // 任务是否准备好运行
-	ConditionTypeJobSucceeded = "JobSucceeded" // 任务是否成功
-	ConditionTypeJobFailed    = "JobFailed"    // 任务是否失败
+	ConditionTypeJobReady        = "JobReady"        // 任务是否准备好运行
+	ConditionTypeJobSucceeded    = "JobSucceeded"    // 任务是否成功
+	ConditionTypeJobFailed       = "JobFailed"       // 任务是否失败
+	ConditionTypeModelRegistered = "ModelRegistered" // 模型是否注册成功
+	// TrainingJobFinalizer Finalizer 名称
+	TrainingJobFinalizer = "training.kubeai.platform.io/finalizer"
+	// 模型注册最大重试次数
+	maxModelRegisterRetry = 10
 )
 
 // TrainingJobReconciler reconciles a TrainingJob object
 type TrainingJobReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme            *runtime.Scheme
+	ModelManagerAddr  string                             // 模型服务地址
+	JobScheduleAddr   string                             // 任务调度服务地址
+	ModelClient       *callbackClient.ModelManagerClient //客户端实例
+	JobScheduleClient *callbackClient.JobScheduleClient  //客户端实例
 }
 
 // +kubebuilder:rbac:groups=training.kubeai.platform.io,resources=trainingjobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=training.kubeai.platform.io,resources=trainingjobs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=training.kubeai.platform.io,resources=trainingjobs/finalizers,verbs=update
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=batch,resources=jobs/status,verbs=get
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch
-
+// +kubebuilder:rbac:groups=kubeflow.org,resources=pytorchjobs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=kubeflow.org,resources=pytorchjobs/status,verbs=get
+// +kubebuilder:rbac:groups=kubeflow.org,resources=tfjobs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=kubeflow.org,resources=tfjobs/status,verbs=get
 func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := log.FromContext(ctx)
+	log := log.FromContext(ctx).WithValues("TrainingJob", req.NamespacedName)
 
 	// 1.获取 TrainingJob CR
 	var tj aiv1.TrainingJob
 	if err := r.Get(ctx, req.NamespacedName, &tj); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+	originalTJ := tj.DeepCopy()
 
-	// 2. 状态直接退出
-	if tj.Status.Phase == "Succeeded" || tj.Status.Phase == "Failed" {
+	// 2.处理Finalizer 生命周期管理
+	if tj.ObjectMeta.DeletionTimestamp.IsZero() {
+		// 资源未被删除：添加 Finalizer
+		if !help.ContainsString(tj.ObjectMeta.Finalizers, TrainingJobFinalizer) {
+			tj.ObjectMeta.Finalizers = append(tj.ObjectMeta.Finalizers, TrainingJobFinalizer)
+			if err := r.Update(ctx, &tj); err != nil {
+				log.Error(err, "Failed to add finalizer to TrainingJob")
+				return ctrl.Result{}, err
+			}
+			// Finalizer更新后，重新入队
+			return ctrl.Result{Requeue: true}, nil
+		}
+	} else {
+		// 资源被删除：执行清理逻辑
+		if help.ContainsString(tj.ObjectMeta.Finalizers, TrainingJobFinalizer) {
+			// 清理资源预留、回调业务侧任务删除
+			log.Info("start cleaning up TrainingJob resources")
+			tj.ObjectMeta.Finalizers = help.RemoveString(tj.ObjectMeta.Finalizers, TrainingJobFinalizer)
+			if err := r.Update(ctx, &tj); err != nil {
+				log.Error(err, "Failed to delete finalizer from TrainingJob")
+				return ctrl.Result{}, err
+			}
+		}
+		// 已删除完成，无需继续调和
 		return ctrl.Result{}, nil
 	}
 
-	// 3. 根据 Framework 构建对应Job
+	// 3. 终端状态直接退出（Succeeded/Failed），但模型未注册时仍需尝试注册
+	if tj.Status.Phase == "Succeeded" || tj.Status.Phase == "Failed" {
+		// 训练成功但模型未注册，且未超过最大重试次数
+		if tj.Status.Phase == "Succeeded" && !r.isModelRegistered(&tj) && tj.Status.ModelRegisterRetryCount < maxModelRegisterRetry {
+			log.Info("start register trained model to model manager")
+			if err := r.registerTrainedModel(ctx, &tj); err != nil {
+				log.Error(err, "Failed to register model after job succeeded")
+				tj.Status.ModelRegisterRetryCount++
+				r.setCondition(&tj, ConditionTypeModelRegistered, metav1.ConditionFalse, "ModelRegisterFailed", fmt.Sprintf("Model register failed: %s", err), metav1.Now())
+				// 状态Patch
+				if err := r.Status().Patch(ctx, &tj, client.MergeFrom(originalTJ)); err != nil {
+					log.Error(err, "Failed to update model register retry status")
+					return ctrl.Result{}, err
+				}
+				// 指数退避重试
+				requeueAfter := time.Duration(tj.Status.ModelRegisterRetryCount*10) * time.Second
+				return ctrl.Result{RequeueAfter: requeueAfter}, nil
+			}
+			// 注册成功更新状态
+			r.setCondition(&tj, ConditionTypeModelRegistered, metav1.ConditionTrue, "ModelRegistered", "Model registered successfully", metav1.Now())
+			log.Info("model registered successfully", "modelID", tj.Status.RegisteredModelID)
+			// 回调业务侧任务完成
+			go r.callbackTaskStatus(&tj)
+			// 统一Patch状态
+			if err := r.Status().Patch(ctx, &tj, client.MergeFrom(originalTJ)); err != nil {
+				log.Error(err, "Failed to update model registered status")
+				return ctrl.Result{}, err
+			}
+		}
+		// 终态直接退出，不再调和
+		return ctrl.Result{}, nil
+	}
+
+	// 4. 任务超时检查
+	if tj.Spec.ActiveDeadlineSeconds > 0 {
+		runTime := time.Since(tj.CreationTimestamp.Time).Seconds()
+		if runTime > float64(tj.Spec.ActiveDeadlineSeconds) {
+			log.Error(nil, "TrainingJob exceeded active deadline", "runTime", runTime, "deadline", tj.Spec.ActiveDeadlineSeconds)
+			r.updateStatus(ctx, &tj, "Failed", "JobTimeout", fmt.Sprintf("Job exceeded active deadline of %d seconds", tj.Spec.ActiveDeadlineSeconds))
+			_ = r.Status().Patch(ctx, &tj, client.MergeFrom(originalTJ))
+			go r.callbackTaskStatus(&tj)
+			return ctrl.Result{}, nil
+		}
+	}
+
+	// 5. 根据 Framework 构建对应Job
 	var job client.Object
 	var err error
 	switch tj.Spec.Framework {
@@ -98,14 +183,16 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
-	// 4. 设置 OwnerReference（级联删除）
+	// 6. 设置 OwnerReference（级联删除）
 	if err := ctrl.SetControllerReference(&tj, job, r.Scheme); err != nil {
 		log.Error(err, "Failed to set controller reference")
 		r.updateStatus(ctx, &tj, "Failed", "OwnerRefSetFailed", err.Error())
+		_ = r.Status().Patch(ctx, &tj, client.MergeFrom(originalTJ))
+		go r.callbackTaskStatus(&tj)
 		return ctrl.Result{}, err
 	}
 
-	// 4. 检查 Job 是否存在
+	// 7. 检查 Job 是否存在
 	found := job.DeepCopyObject().(client.Object)
 	err = r.Get(ctx, client.ObjectKeyFromObject(job), found)
 	if err != nil {
@@ -115,26 +202,27 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			if err := r.Create(ctx, job); err != nil {
 				log.Error(err, "Failed to create Job")
 				r.updateStatus(ctx, &tj, "Failed", "JobCreateFailed", err.Error())
+				_ = r.Status().Patch(ctx, &tj, client.MergeFrom(originalTJ))
+				go r.callbackTaskStatus(&tj)
 				return ctrl.Result{}, err
 			}
-			r.updateStatus(ctx, &tj, "Running", "JobCreated", "Job started successfully")
-			return ctrl.Result{}, nil
+			r.updateStatus(ctx, &tj, "Pending", "JobCreated", "Job created successfully, waiting for pod scheduling")
+		} else {
+			log.Error(err, "Failed to get Job")
+			return ctrl.Result{}, err
 		}
-		log.Error(err, "Failed to get Job")
+	} else {
+		// Job已存在，同步状态
+		r.syncStatusFromJob(ctx, &tj, found)
+	}
+
+	// 8. 同步分布式任务状态
+	if err := r.Status().Patch(ctx, &tj, client.MergeFrom(originalTJ)); err != nil {
+		log.Error(err, "Failed to patch TrainingJob status")
 		return ctrl.Result{}, err
 	}
 
-	// 更新 CR 状态
-	r.updateStatus(ctx, &tj, "Pending", "JobCreated", "Job created, waiting for pod")
-	return ctrl.Result{RequeueAfter: 3 * time.Second}, r.Status().Update(ctx, &tj)
-
-	// 5. 同步分布式任务状态
-	r.syncStatusFromJob(ctx, &tj, found)
-	if err := r.Status().Update(ctx, &tj); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	// 6. 定期同步
+	// 9. 定期调和（5秒后重试）
 	return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 }
 
@@ -146,18 +234,23 @@ func (r *TrainingJobReconciler) buildDistributedPyTorchJob(tj *aiv1.TrainingJob)
 	// 通用配置
 	backoffLimit := r.buildBackoffLimit(tj)
 
+	// 写入节点选择
+	podTemplate := r.buildPodTemplate(tj)
+	if tj.Spec.NodeName != "" {
+		podTemplate.Spec.NodeName = tj.Spec.NodeName
+	}
 	// Master节点
 	replicaSpecs[trainingv1.PyTorchJobReplicaTypeMaster] = &trainingv1.ReplicaSpec{
-		Replicas:      ptr[int32](1),
+		Replicas:      help.Ptr[int32](1),
 		RestartPolicy: trainingv1.RestartPolicyOnFailure,
-		Template:      r.buildPodTemplate(tj),
+		Template:      podTemplate,
 	}
 
 	// Worker 节点 分布式开启
 	if tj.Spec.Distributed && tj.Spec.WorkerNum > 0 {
 		replicaSpecs[trainingv1.PyTorchJobReplicaTypeWorker] = &trainingv1.ReplicaSpec{
 			Replicas:      &tj.Spec.WorkerNum,
-			Template:      r.buildPodTemplate(tj),
+			Template:      podTemplate,
 			RestartPolicy: trainingv1.RestartPolicyOnFailure,
 		}
 	}
@@ -167,6 +260,7 @@ func (r *TrainingJobReconciler) buildDistributedPyTorchJob(tj *aiv1.TrainingJob)
 			RunPolicy: trainingv1.RunPolicy{
 				BackoffLimit:            &backoffLimit,
 				TTLSecondsAfterFinished: &tj.Spec.TTLSecondsAfterFinished,
+				ActiveDeadlineSeconds:   &tj.Spec.ActiveDeadlineSeconds,
 			},
 			PyTorchReplicaSpecs: replicaSpecs,
 		},
@@ -181,11 +275,16 @@ func (r *TrainingJobReconciler) buildDistributedTFJob(tj *aiv1.TrainingJob) (*tr
 	// 通用配置
 	backoffLimit := r.buildBackoffLimit(tj)
 
+	podTemplate := r.buildPodTemplate(tj)
+	if tj.Spec.NodeName != "" {
+		podTemplate.Spec.NodeName = tj.Spec.NodeName
+	}
+
 	// Chief 节点（TF 2.x 推荐）
 	replicaSpecs[trainingv1.TFJobReplicaTypeMaster] = &trainingv1.ReplicaSpec{
-		Replicas:      ptr[int32](1),
+		Replicas:      help.Ptr[int32](1),
 		RestartPolicy: trainingv1.RestartPolicyOnFailure,
-		Template:      r.buildPodTemplate(tj),
+		Template:      podTemplate,
 	}
 
 	// Worker 节点
@@ -193,7 +292,7 @@ func (r *TrainingJobReconciler) buildDistributedTFJob(tj *aiv1.TrainingJob) (*tr
 		replicaSpecs[trainingv1.TFJobReplicaTypeWorker] = &trainingv1.ReplicaSpec{
 			Replicas:      &tj.Spec.WorkerNum,
 			RestartPolicy: trainingv1.RestartPolicyOnFailure,
-			Template:      r.buildPodTemplate(tj),
+			Template:      podTemplate,
 		}
 	}
 
@@ -202,7 +301,7 @@ func (r *TrainingJobReconciler) buildDistributedTFJob(tj *aiv1.TrainingJob) (*tr
 		replicaSpecs[trainingv1.TFJobReplicaTypePS] = &trainingv1.ReplicaSpec{
 			Replicas:      &tj.Spec.MasterNum,
 			RestartPolicy: trainingv1.RestartPolicyOnFailure,
-			Template:      r.buildPodTemplate(tj),
+			Template:      podTemplate,
 		}
 	}
 
@@ -212,6 +311,7 @@ func (r *TrainingJobReconciler) buildDistributedTFJob(tj *aiv1.TrainingJob) (*tr
 			RunPolicy: trainingv1.RunPolicy{
 				BackoffLimit:            &backoffLimit,
 				TTLSecondsAfterFinished: &tj.Spec.TTLSecondsAfterFinished,
+				ActiveDeadlineSeconds:   &tj.Spec.ActiveDeadlineSeconds,
 			},
 			TFReplicaSpecs: replicaSpecs,
 		},
@@ -225,18 +325,25 @@ func (r *TrainingJobReconciler) buildSingleNodeJob(tj *aiv1.TrainingJob, suffix 
 	backoffLimit := r.buildBackoffLimit(tj)
 	container := r.buildContainer(tj)
 
+	podSpec := corev1.PodSpec{
+		RestartPolicy: corev1.RestartPolicyOnFailure,
+		Containers:    []corev1.Container{container},
+		Volumes:       tj.Spec.Volumes,
+	}
+	// 【修复】写入节点选择
+	if tj.Spec.NodeName != "" {
+		podSpec.NodeName = tj.Spec.NodeName
+	}
+
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{Name: jobName, Namespace: tj.Namespace},
 		Spec: batchv1.JobSpec{
 			BackoffLimit:            &backoffLimit,
 			TTLSecondsAfterFinished: &tj.Spec.TTLSecondsAfterFinished,
+			ActiveDeadlineSeconds:   &tj.Spec.ActiveDeadlineSeconds,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: r.buildPodMeta(tj),
-				Spec: corev1.PodSpec{
-					RestartPolicy: corev1.RestartPolicyOnFailure,
-					Containers:    []corev1.Container{container},
-					Volumes:       tj.Spec.Volumes,
-				},
+				Spec:       podSpec,
 			},
 		},
 	}, nil
@@ -260,8 +367,20 @@ func (r *TrainingJobReconciler) buildContainer(tj *aiv1.TrainingJob) corev1.Cont
 		Env:          tj.Spec.Env,
 		VolumeMounts: tj.Spec.VolumeMounts,
 		Resources:    r.buildResources(tj.Spec.Resources),
-		// 自动注入监控配置
-		Args: r.buildMonitorArgs(tj.Spec.EnableMonitor),
+	}
+
+	// 监控参数去重追加
+	if tj.Spec.EnableMonitor {
+		monitorArgs := []string{"--monitor-enabled=true", "--monitor-endpoint=http://monitor-agent.kubeai-system.svc:9090"}
+		argMap := make(map[string]bool)
+		for _, arg := range container.Args {
+			argMap[arg] = true
+		}
+		for _, arg := range monitorArgs {
+			if !argMap[arg] {
+				container.Args = append(container.Args, arg)
+			}
+		}
 	}
 	return container
 }
@@ -298,9 +417,11 @@ func (r *TrainingJobReconciler) buildResources(res aiv1.ResourceRequirements) co
 		reqList[corev1.ResourceMemory] = resource.MustParse(res.Memory)
 		limitList[corev1.ResourceMemory] = resource.MustParse(res.Memory)
 	}
-	// GPU（只配置 limits，这是标准做法）
+	// GPU：Requests与Limits保持一致，符合K8s GPU调度规范
 	if res.GPU != "" && strings.TrimSpace(res.GPU) != "0" {
-		limitList["nvidia.com/gpu"] = resource.MustParse(res.GPU)
+		gpuQuantity := resource.MustParse(res.GPU)
+		reqList["nvidia.com/gpu"] = gpuQuantity
+		limitList["nvidia.com/gpu"] = gpuQuantity
 	}
 
 	return corev1.ResourceRequirements{Requests: reqList, Limits: limitList}
@@ -315,12 +436,10 @@ func (r *TrainingJobReconciler) updateStatus(ctx context.Context, tj *aiv1.Train
 
 	// 1. 检查状态是否真的变化，避免不必要的更新
 	if tj.Status.Phase == phase && tj.Status.Reason == reason && tj.Status.Message == msg {
-		log.V(4).Info("Status unchanged, skipping update")
 		return
 	}
 
 	// 2. 更新基础状态
-	oldStatus := tj.DeepCopy()
 	tj.Status.Phase = phase
 	tj.Status.Reason = reason
 	tj.Status.Message = msg
@@ -331,11 +450,6 @@ func (r *TrainingJobReconciler) updateStatus(ctx context.Context, tj *aiv1.Train
 	r.setCondition(tj, ConditionTypeJobSucceeded, getConditionStatus(phase, "Succeeded"), reason, msg, now)
 	r.setCondition(tj, ConditionTypeJobFailed, getConditionStatus(phase, "Failed"), reason, msg, now)
 
-	// 4. 只更新变化的字段（使用 Patch 代替 Update 更优雅，可选）
-	if err := r.Status().Patch(ctx, tj, client.MergeFrom(oldStatus)); err != nil {
-		log.Error(err, "Failed to patch TrainingJob status")
-		return
-	}
 	log.Info("Status updated", "phase", phase, "reason", reason)
 }
 
@@ -420,11 +534,6 @@ func (r *TrainingJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-// ptr工具函数： 创建int32指针
-func ptr[T any](v T) *T {
-	return &v
-}
-
 // buildPodLabels
 // 给训练 Pod 打标签，用于：
 // 1. 日志检索（Loki）
@@ -439,8 +548,8 @@ func (r *TrainingJobReconciler) buildPodLabels(tj *aiv1.TrainingJob) map[string]
 		"training.distributed":   strconv.FormatBool(tj.Spec.Distributed),
 	}
 
-	if tj.Spec.ModelID > 0 {
-		labels["training.model.id"] = fmt.Sprintf("%d", tj.Spec.ModelID)
+	if tj.Spec.ModelID != "" {
+		labels["training.model.id"] = tj.Spec.ModelID
 	}
 	if tj.Spec.EnableLogs {
 		labels["training.logs.enabled"] = strconv.FormatBool(tj.Spec.EnableLogs)
@@ -469,7 +578,7 @@ func (r *TrainingJobReconciler) buildMonitorArgs(enableMonitor bool) []string {
 	if !enableMonitor {
 		return nil
 	}
-	return []string{"--enable-monitor", "--monitor-port=8080"}
+	return []string{"--monitor-enabled=true", "--monitor-endpoint=http://monitor-agent.kubeai-system.svc:9090"}
 }
 
 // syncStatusFromJob 从下游 Job 同步状态到 TrainingJob
@@ -523,4 +632,134 @@ func (r *TrainingJobReconciler) syncBatchJobStatus(
 	default:
 		r.updateStatus(ctx, tj, "Pending", "JobPending", "Job is pending")
 	}
+}
+
+// isModelRegistered 检查模型是否已注册
+func (r *TrainingJobReconciler) isModelRegistered(tj *aiv1.TrainingJob) bool {
+	for _, cond := range tj.Status.Conditions {
+		if cond.Type == ConditionTypeModelRegistered && cond.Status == metav1.ConditionTrue {
+			return true
+		}
+	}
+	return false
+}
+
+// registerTrainedModel 适配 model-manager 接口的模型注册逻辑
+func (r *TrainingJobReconciler) registerTrainedModel(ctx context.Context, tj *aiv1.TrainingJob) error {
+	log := log.FromContext(ctx)
+
+	// 前置校验：仅训练成功且有输出路径时注册
+	if tj.Status.Phase != "Succeeded" {
+		return fmt.Errorf("only succeeded job can register model, current phase: %s", tj.Status.Phase)
+	}
+	if tj.Spec.OutputPath == "" {
+		return fmt.Errorf("model output path is empty, skip register")
+	}
+
+	// 构造 model-manager
+	registerReq := &callbackClient.ModelRegisterRequest{
+		ModelName:   tj.Spec.ModelName,
+		Version:     fmt.Sprintf("v%d", time.Now().Unix()), // 自动生成版本号
+		StoragePath: tj.Spec.OutputPath,                    // 训练输出路径
+		Framework:   tj.Spec.Framework,
+		TaskType:    "training",
+		Description: fmt.Sprintf("trained model from job %s", tj.Name),
+		Metadata: map[string]string{
+			"training_job_name": tj.Name,
+			"namespace":         tj.Namespace,
+			"distributed":       strconv.FormatBool(tj.Spec.Distributed),
+		},
+		TrainingJobName: tj.Name,
+		Namespace:       tj.Namespace,
+		ModelID:         tj.Spec.ModelID, // 关联已有模型ID（如有）
+	}
+
+	// 调用 model-manager 注册接口
+	resp, err := r.ModelClient.RegisterModel(ctx, registerReq)
+	if err != nil {
+		return fmt.Errorf("call model-manager RegisterModel failed: %w", err)
+	}
+
+	// 校验响应
+	if !resp.Success {
+		return fmt.Errorf("model-manager register failed: %s (model_id: %s)", resp.Message, resp.ModelID)
+	}
+
+	// 更新 TrainingJob 状态（记录模型ID）
+	tj.Spec.ModelID = resp.ModelID
+	tj.Status.RegisteredModelID = resp.ModelID
+	log.Info("Model registered successfully", "model_id", resp.ModelID, "job_name", tj.Name)
+	return nil
+}
+
+// callbackTaskStatus 回调任务侧状态
+func (r *TrainingJobReconciler) callbackTaskStatus(tj *aiv1.TrainingJob) {
+	if r.JobScheduleAddr == "" {
+		logx.Infof("callback task status to business side, no callback url, task name: %s", tj.Name)
+		return
+	}
+
+	log := logx.WithContext(context.Background()).WithFields(
+		logx.Field("task_id", tj.Name),
+		logx.Field("phase", tj.Status.Phase),
+		logx.Field("jobScheduleAddr", r.JobScheduleAddr),
+	)
+
+	// 1. 构建回调请求体
+	reqBody := &callbackClient.CallBackTaskStatusReq{
+		TaskID:     tj.Name,
+		ModelName:  tj.Spec.ModelName,
+		Phase:      tj.Status.Phase,
+		Reason:     tj.Status.Reason,
+		Message:    tj.Status.Message,
+		ModelID:    tj.Status.RegisteredModelID,
+		NodeName:   tj.Spec.NodeName,
+		FinishedAt: time.Now().Format(time.RFC3339),
+	}
+
+	// 2. 指数退避重试配置
+	maxRetries := 3
+	baseDelay := 1 * time.Second
+	maxDelay := 10 * time.Second
+
+	// 3. 重试循环
+	for i := 0; i < maxRetries; i++ {
+		// 计算延迟时间：指数退避
+		delay := time.Duration(math.Pow(2, float64(i))) * baseDelay
+		if delay > maxDelay {
+			delay = maxDelay
+		}
+
+		// 带超时的HTTP请求
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		resp, err := r.JobScheduleClient.CallBackTaskStatus(ctx, reqBody)
+		if err != nil {
+			log.Errorf("create callback request failed (attempt %d/%d): %v", i+1, maxRetries, err)
+			cancel()
+			time.Sleep(delay)
+			continue
+		}
+		cancel() // 立即释放资源
+
+		if err != nil {
+			log.Errorf("send callback request failed (attempt %d/%d): %v", i+1, maxRetries, err)
+			time.Sleep(delay)
+			continue
+		}
+
+		// 检查响应状态码
+		if resp.Code == http.StatusOK {
+			log.Infof("callback success (attempt %d/%d), status code: %d", i+1, maxRetries, resp.Code)
+			return
+		}
+
+		log.Errorf("callback failed (attempt %d/%d), status code: %d", i+1, maxRetries, resp.Code)
+		if i < maxRetries-1 {
+			time.Sleep(delay)
+		}
+	}
+
+	// 所有重试均失败
+	log.Errorf("all callback attempts failed, task: %s", tj.Name)
+
 }

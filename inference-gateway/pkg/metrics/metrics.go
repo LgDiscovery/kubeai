@@ -27,8 +27,33 @@ var (
 		},
 		// 👇 关键：标签列表，顺序必须和 WithLabelValues 完全一致
 		[]string{"model_name", "model_version", "service"})
+
+	TrainingJobTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "kubeai_training_job_total",
+			Help: "Total number of training jobs by status and framework",
+		},
+		[]string{"status", "framework"},
+	)
+	TrainingJobDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "kubeai_training_job_duration_seconds",
+			Help:    "Duration of training jobs in seconds",
+			Buckets: []float64{60, 300, 600, 1800, 3600, 7200, 14400, 28800, 86400},
+		},
+		[]string{"framework"},
+	)
+	TrainingJobGPUHour = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "kubeai_training_job_gpu_hours_total",
+			Help: "Total GPU hours consumed by training jobs",
+		},
+		[]string{"framework"},
+	)
 )
 
 func init() {
-	metrics.Registry.MustRegister(RequestTotal, RequestDuration, InferenceReplicas)
+	metrics.Registry.MustRegister(RequestTotal,
+		RequestDuration, InferenceReplicas, TrainingJobDuration,
+		TrainingJobGPUHour, TrainingJobTotal)
 }

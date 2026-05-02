@@ -1,0 +1,39 @@
+apiVersion: ai.platform.io/v1
+kind: TrainingJob
+metadata:
+  name: hpc-benchmark
+  namespace: kubeai
+spec:
+  framework: mpi
+  replicaSpecs:
+    Launcher:
+      replicas: 1
+      template:
+        spec:
+          containers:
+            - name: mpi-launcher
+              image: mpioperator/tensorflow-benchmarks:latest
+              command: ["mpirun"]
+              args:
+                - "-np"
+                - "4"
+                - "--hostfile"
+                - "/etc/mpi/hostfile"
+                - "python"
+                - "/app/benchmark.py"
+    Worker:
+      replicas: 4
+      template:
+        spec:
+          containers:
+            - name: mpi-worker
+              image: mpioperator/tensorflow-benchmarks:latest
+              command: ["/usr/sbin/sshd", "-D"]
+              resources:
+                limits:
+                  nvidia.com/gpu: 1
+  runPolicy:
+    cleanPodPolicy: All
+  schedulingPolicy:
+    minAvailable: 5
+    queue: "high-priority"

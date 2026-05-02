@@ -1,0 +1,136 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubeai-alerts
+  namespace: monitoring
+  labels:
+    release: kube-prometheus
+data:
+  kubeai-alerts.yaml: |
+    groups:
+      - name: kubeai-platform
+        rules:
+          # ========== 服务可用性 ==========
+          - alert: ServiceDown
+            expr: up{job=~"kubeai-.*"} == 0
+            for: 1m
+            labels:
+              severity: critical
+              component: platform
+            annotations:
+              summary: "服务 {{ $labels.job }} 不可用"
+              description: "服务 {{ $labels.job }} 实例 {{ $labels.instance }} 已宕机超过1分钟"
+          
+          - alert: APIGatewayHighErrorRate
+            expr: sum(rate(kubeai_api_request_total{status=~"5.."}[5m])) / sum(rate(kubeai_api_request_total[5m])) > 0.05
+            for: 2m
+            labels:
+              severity: warning
+              component: gateway
+            annotations:
+              summary: "API网关错误率过高"
+              description: "网关5xx错误率超过5%，当前值: {{ $value | humanizePercentage }}"
+          
+          # ========== 模型健康 ==========
+          - alert: ModelUnhealthy
+            expr: kubeai_model_health_status == 0
+            for: 30s
+            labels:
+              severity: warning
+              component: model-manager
+            annotations:
+              summary: "模型 {{ $labels.model_name }} 版本 {{ $labels.version }} 健康异常"
+              description: "模型实例健康检查失败，已持续30秒"
+          
+          - alert: NoActiveModelVersion
+            expr: kubeai_model_version_total{status="active"} == 0
+            for: 5m
+            labels:
+              severity: info
+              component: model-manager
+            annotations:
+              summary: "无活跃模型版本"
+              description: "当前没有任何 active 状态的模型版本"
+          
+          # ========== 推理服务 ==========
+          - alert: InferenceHighFailureRate
+            expr: sum(rate(kubeai_inference_total{status="failed"}[5m])) / sum(rate(kubeai_inference_total[5m])) > 0.05
+            for: 2m
+            labels:
+              severity: warning
+              component: inference
+            annotations:
+              summary: "推理服务失败率过高"
+              description: "全局推理失败率超过5%，当前值: {{ $value | humanizePercentage }}"
+          
+          - alert: InferenceHighLatency
+            expr: histogram_quantile(0.95, sum(rate(kubeai_inference_duration_seconds_bucket[5m])) by (le, model_name)) > 5
+            for: 3m
+            labels:
+              severity: warning
+              component: inference
+            annotations:
+              summary: "推理延迟过高"
+              description: "模型 {{ $labels.model_name }} P95延迟超过5秒，当前值: {{ $value }}s"
+          
+          - alert: InferenceReplicasMismatch
+            expr: kubeai_inference_replicas != kubeai_inference_replicas_desired
+            for: 5m
+            labels:
+              severity: warning
+              component: inference
+            annotations:
+              summary: "推理副本数不匹配"
+              description: "期望副本数与实际就绪副本数不一致"
+          
+          # ========== 调度中心 ==========
+          - alert: TaskQueueBacklog
+            expr: sum(redis_stream_length{stream=~"kubeai:.*:tasks"}) > 1000
+            for: 10m
+            labels:
+              severity: warning
+              component: scheduler
+            annotations:
+              summary: "任务队列积压严重"
+              description: "任务队列长度超过1000，可能存在消费瓶颈"
+          
+          - alert: HighTaskFailureRate
+            expr: sum(rate(kubeai_task_failed_total[5m])) / sum(rate(kubeai_task_completed_total[5m])) > 0.1
+            for: 5m
+            labels:
+              severity: warning
+              component: scheduler
+            annotations:
+              summary: "任务失败率过高"
+              description: "任务失败率超过10%"
+          
+          # ========== 集群资源 ==========
+          - alert: GPUInsufficient
+            expr: (sum(kube_node_status_capacity{resource="nvidia_com_gpu"}) - sum(kube_node_status_allocatable{resource="nvidia_com_gpu"})) / sum(kube_node_status_capacity{resource="nvidia_com_gpu"}) > 0.9
+            for: 5m
+            labels:
+              severity: critical
+              component: cluster
+            annotations:
+              summary: "GPU资源不足"
+              description: "集群GPU总容量利用率超过90%"
+          
+          - alert: NodeMemoryPressure
+            expr: kube_node_status_condition{condition="MemoryPressure",status="true"} == 1
+            for: 5m
+            labels:
+              severity: warning
+              component: cluster
+            annotations:
+              summary: "节点内存压力"
+              description: "节点 {{ $labels.node }} 处于内存压力状态"
+          
+          - alert: PersistentVolumeUsageHigh
+            expr: (kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) > 0.85
+            for: 10m
+            labels:
+              severity: warning
+              component: storage
+            annotations:
+              summary: "存储卷使用率过高"
+              description: "卷 {{ $labels.persistentvolumeclaim }} 使用率超过85%"

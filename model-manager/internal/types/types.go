@@ -72,21 +72,43 @@ type ModelMetadataResp struct {
 	StoragePath  string `json:"storage_path"`
 }
 
+type ModelRegisterRequest struct {
+	ModelName       string            `json:"model_name"`
+	StoragePath     string            `json:"storage_path"`
+	Framework       string            `json:"framework"`
+	Version         string            `json:"version"`
+	Description     string            `json:"description,optional"`
+	Metadata        map[string]string `json:"metadata,optional"`
+	TrainingJobName string            `json:"training_job_name,optional"`
+	Namespace       string            `json:"namespace,optional"`
+	ModelID         string            `json:"model_id,optional"`
+	TaskType        string            `json:"task_type,optional"`
+}
+
+type ModelRegisterResponse struct {
+	ModelID string `json:"model_id"`
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+	Version string `json:"version,optional"`
+}
+
 type ModelVersion struct {
-	ID           uint   `json:"id"`
-	ModelID      uint   `json:"model_id"`
-	Version      string `json:"version"`
-	Description  string `json:"description,optional"`
-	StoragePath  string `json:"storage_path"`
-	Framework    string `json:"framework,optional"`
-	FrameworkVer string `json:"framework_version,optional"`
-	Metrics      string `json:"metrics,optional"`
-	Parameters   string `json:"parameters,optional"`
-	Size         int64  `json:"size"`
-	Checksum     string `json:"checksum"`
-	Status       string `json:"status"`
-	CreatedAt    string `json:"created_at"`
-	UpdatedAt    string `json:"updated_at"`
+	ID              uint              `json:"id"`
+	ModelID         uint              `json:"model_id"`
+	Version         string            `json:"version"`
+	Description     string            `json:"description,optional"`
+	StoragePath     string            `json:"storage_path"`
+	Framework       string            `json:"framework,optional"`
+	FrameworkVer    string            `json:"framework_version,optional"`
+	Metadata        map[string]string `json:"metadata,optional"`
+	Metrics         string            `json:"metrics,optional"`
+	Parameters      string            `json:"parameters,optional"`
+	TrainingJobName string            `json:"training_job_name,optional"`
+	Size            int64             `json:"size"`
+	Checksum        string            `json:"checksum"`
+	Status          string            `json:"status"`
+	CreatedAt       string            `json:"created_at"`
+	UpdatedAt       string            `json:"updated_at"`
 }
 
 type ModelVersionListResp struct {

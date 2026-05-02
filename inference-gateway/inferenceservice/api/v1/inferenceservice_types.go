@@ -36,6 +36,8 @@ type InferenceServiceSpec struct {
 	Port int32 `json:"port,omitempty"`
 	// 副本数（可被HPA覆盖）
 	Replicas *int32 `json:"replicas,omitempty"`
+	// 节点名称（可被HPA覆盖）
+	NodeName string `json:"nodeName,omitempty"`
 
 	//资源限制
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`

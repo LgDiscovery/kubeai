@@ -1,0 +1,35 @@
+apiVersion: ai.platform.io/v1
+kind: TrainingJob
+metadata:
+  name: resnet-tf
+  namespace: kubeai
+spec:
+  framework: tensorflow
+  replicaSpecs:
+    PS:
+      replicas: 2
+      template:
+        spec:
+          containers:
+            - name: tensorflow
+              image: tensorflow/tensorflow:2.15.0-gpu
+              command: ["python", "-m", "tensorflow.distribute.launcher"]
+              args: ["--ps_hosts=auto", "--worker_hosts=auto", "/app/train.py"]
+              resources:
+                limits:
+                  cpu: 4
+                  memory: 8Gi
+    Worker:
+      replicas: 4
+      template:
+        spec:
+          containers:
+            - name: tensorflow
+              image: tensorflow/tensorflow:2.15.0-gpu
+              command: ["python", "-m", "tensorflow.distribute.launcher"]
+              args: ["--ps_hosts=auto", "--worker_hosts=auto", "/app/train.py"]
+              resources:
+                limits:
+                  nvidia.com/gpu: 1
+  runPolicy:
+    cleanPodPolicy: Running

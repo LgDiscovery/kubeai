@@ -41,6 +41,11 @@ ModelManager:
   URL: "http://model-manager.kubeai.svc.cluster.local:58080"
   Timeout: 5s
 
+JobSchedule:
+  URL: "http://job-schedule.kubeai.svc.cluster.local:58081"
+  Timeout: 5s
+
+
 K8s:
   Namespace: "kubeai"
   InferenceJobImage: "tensorflow/serving:2.15.0"
@@ -64,3 +69,8 @@ Log:
 Metrics:
   Enabled: true
   Path: "/metrics"
+
+
+MinIO:
+  DatasetPvc: "minio-dataset-pvc"
+  OutputPvc: "minio-output-pvc"

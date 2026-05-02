@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"errors"
+	"fmt"
 	"gorm.io/gorm"
 	"kubeai-job-scheduler/internal/model"
 )
@@ -48,4 +49,14 @@ func (r *TrainingTaskRepo) List(ctx context.Context, status string, offset, limi
 
 func (r *TrainingTaskRepo) Delete(ctx context.Context, taskID string) error {
 	return r.db.WithContext(ctx).Where("task_id = ?", taskID).Delete(&model.TrainingTask{}).Error
+}
+
+func (r *TrainingTaskRepo) CallbackStatus(ctx context.Context, taskID string, status model.TaskStatus) error {
+	var task model.TrainingTask
+	err := r.db.WithContext(ctx).Where("task_id = ?", taskID).First(&task).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return fmt.Errorf("task not found")
+	}
+	task.Status = status
+	return r.db.WithContext(ctx).Save(&task).Error
 }

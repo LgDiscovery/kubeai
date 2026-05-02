@@ -12,7 +12,9 @@ type Config struct {
 	Etcd         discov.EtcdConf `json:",optional"`
 	Redis        RedisConfig
 	Database     DatabaseConfig
+	MinIO        MinIOConfig
 	ModelManager ModelManagerConfig
+	JobSchedule  JobScheduleConfig
 	K8s          K8sConfig
 	Metrics      MetricsConfig
 	Scheduler    SchedulerConfig
@@ -24,6 +26,10 @@ type ResourceSyncConfig struct {
 	Interval time.Duration
 }
 
+type MinIOConfig struct {
+	DatasetPvc string
+	OutputPvc  string
+}
 type RedisConfig struct {
 	RedisConf     redis.RedisConf
 	Streams       StreamsConfig
@@ -55,6 +61,10 @@ type ModelManagerConfig struct {
 	Timeout time.Duration
 }
 
+type JobScheduleConfig struct {
+	URL     string
+	Timeout time.Duration
+}
 type K8sConfig struct {
 	Namespace string
 }

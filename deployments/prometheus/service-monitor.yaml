@@ -1,0 +1,79 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: model-manager
+  namespace: kubeai
+  labels:
+    kubeai: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: kubeai-model-manager
+  endpoints:
+    - port: http
+      interval: 30s
+      path: /api/v1/models/metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: job-schedule
+  namespace: kubeai
+  labels:
+    kubeai: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: kubeai-job-schedule
+  endpoints:
+    - port: http
+      interval: 30s
+      path: /api/v1/jobs/metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: inference-gateway
+  namespace: kubeai
+  labels:
+    kubeai: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: kubeai-inference-gateway
+  endpoints:
+    - port: http
+      interval: 30s
+      path: /api/v1/inference/metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: observability-gateway
+  namespace: kubeai
+  labels:
+    kubeai: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: kubeai-observability-gateway
+  endpoints:
+    - port: http
+      interval: 30s
+      path: /api/v1/observer/metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: api-gateway
+  namespace: kubeai
+  labels:
+    kubeai: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: kubeai-api-gateway
+  endpoints:
+    - port: http
+      interval: 30s
+      path: /api/v1/metrics
