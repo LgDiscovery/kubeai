@@ -101,6 +101,8 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if help.ContainsString(tj.ObjectMeta.Finalizers, TrainingJobFinalizer) {
 			// 清理资源预留、回调业务侧任务删除
 			log.Info("start cleaning up TrainingJob resources")
+			tj.Status.Phase = "Cancelled"
+			go r.callbackTaskStatus(&tj)
 			tj.ObjectMeta.Finalizers = help.RemoveString(tj.ObjectMeta.Finalizers, TrainingJobFinalizer)
 			if err := r.Update(ctx, &tj); err != nil {
 				log.Error(err, "Failed to delete finalizer from TrainingJob")
@@ -139,6 +141,8 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				log.Error(err, "Failed to update model registered status")
 				return ctrl.Result{}, err
 			}
+		} else {
+			go r.callbackTaskStatus(&tj)
 		}
 		// 终态直接退出，不再调和
 		return ctrl.Result{}, nil
@@ -236,7 +240,7 @@ func (r *TrainingJobReconciler) buildDistributedPyTorchJob(tj *aiv1.TrainingJob)
 
 	// 写入节点选择
 	podTemplate := r.buildPodTemplate(tj)
-	if tj.Spec.NodeName != "" {
+	if !tj.Spec.Distributed && tj.Spec.NodeName != "" {
 		podTemplate.Spec.NodeName = tj.Spec.NodeName
 	}
 	// Master节点
@@ -276,12 +280,12 @@ func (r *TrainingJobReconciler) buildDistributedTFJob(tj *aiv1.TrainingJob) (*tr
 	backoffLimit := r.buildBackoffLimit(tj)
 
 	podTemplate := r.buildPodTemplate(tj)
-	if tj.Spec.NodeName != "" {
+	if !tj.Spec.Distributed && tj.Spec.NodeName != "" {
 		podTemplate.Spec.NodeName = tj.Spec.NodeName
 	}
 
 	// Chief 节点（TF 2.x 推荐）
-	replicaSpecs[trainingv1.TFJobReplicaTypeMaster] = &trainingv1.ReplicaSpec{
+	replicaSpecs[trainingv1.TFJobReplicaTypeChief] = &trainingv1.ReplicaSpec{
 		Replicas:      help.Ptr[int32](1),
 		RestartPolicy: trainingv1.RestartPolicyOnFailure,
 		Template:      podTemplate,
@@ -364,6 +368,7 @@ func (r *TrainingJobReconciler) buildContainer(tj *aiv1.TrainingJob) corev1.Cont
 		Name:         "trainer-" + help.RandomString(10),
 		Image:        tj.Spec.Image,
 		Command:      tj.Spec.Command,
+		Args:         tj.Spec.Args,
 		Env:          tj.Spec.Env,
 		VolumeMounts: tj.Spec.VolumeMounts,
 		Resources:    r.buildResources(tj.Spec.Resources),
@@ -390,8 +395,10 @@ func (r *TrainingJobReconciler) buildPodTemplate(tj *aiv1.TrainingJob) corev1.Po
 	return corev1.PodTemplateSpec{
 		ObjectMeta: r.buildPodMeta(tj),
 		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{r.buildContainer(tj)},
-			Volumes:    tj.Spec.Volumes,
+			Containers:   []corev1.Container{r.buildContainer(tj)},
+			Volumes:      tj.Spec.Volumes,
+			NodeSelector: tj.Spec.NodeSelector,
+			Tolerations:  tj.Spec.Tolerations,
 		},
 	}
 }
@@ -686,7 +693,6 @@ func (r *TrainingJobReconciler) registerTrainedModel(ctx context.Context, tj *ai
 	}
 
 	// 更新 TrainingJob 状态（记录模型ID）
-	tj.Spec.ModelID = resp.ModelID
 	tj.Status.RegisteredModelID = resp.ModelID
 	log.Info("Model registered successfully", "model_id", resp.ModelID, "job_name", tj.Name)
 	return nil
@@ -725,27 +731,22 @@ func (r *TrainingJobReconciler) callbackTaskStatus(tj *aiv1.TrainingJob) {
 	// 3. 重试循环
 	for i := 0; i < maxRetries; i++ {
 		// 计算延迟时间：指数退避
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		delay := time.Duration(math.Pow(2, float64(i))) * baseDelay
 		if delay > maxDelay {
 			delay = maxDelay
 		}
-
-		// 带超时的HTTP请求
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		// 发起请求
 		resp, err := r.JobScheduleClient.CallBackTaskStatus(ctx, reqBody)
 		if err != nil {
-			log.Errorf("create callback request failed (attempt %d/%d): %v", i+1, maxRetries, err)
+			log.Errorf("send callback request failed (attempt %d/%d): %v", i+1, maxRetries, err)
 			cancel()
-			time.Sleep(delay)
+			if i < maxRetries-1 {
+				time.Sleep(delay)
+			}
 			continue
 		}
 		cancel() // 立即释放资源
-
-		if err != nil {
-			log.Errorf("send callback request failed (attempt %d/%d): %v", i+1, maxRetries, err)
-			time.Sleep(delay)
-			continue
-		}
 
 		// 检查响应状态码
 		if resp.Code == http.StatusOK {

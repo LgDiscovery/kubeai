@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	modelClient "kubeai-inference-gateway/internal/client"
+	"kubeai-inference-gateway/internal/help"
 	"kubeai-inference-gateway/internal/model"
 	"kubeai-inference-gateway/internal/resources"
 	"kubeai-inference-gateway/pkg/metrics"
@@ -23,6 +24,8 @@ import (
 
 	aiv1 "kubeai-inference-gateway/inferenceservice/api/v1"
 )
+
+const InferenceServiceFinalizer = "ai.kubeai.io/finalizer"
 
 type InferenceServiceReconciler struct {
 	client.Client
@@ -46,7 +49,7 @@ type InferenceServiceReconciler struct {
 
 // Reconcile 实现协调循环
 func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := log.FromContext(ctx)
+	log := log.FromContext(ctx).WithValues("inferenceService", req.NamespacedName)
 
 	// 1. 获取 InferenceService 实例
 	isvc := &aiv1.InferenceService{}
@@ -54,40 +57,61 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		log.Error(err, "unable to fetch InferenceService")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+	old := isvc.DeepCopy()
 
-	// 2. 状态初始化
-	if isvc.Status.StableState == "" {
-		isvc.Status.StableState = string(model.StatusPending)
-		isvc.Status.Ready = false
-		if err := r.Status().Update(ctx, isvc); err != nil {
-			log.Error(err, "Failed to update InferenceService status")
-			return ctrl.Result{}, err
+	// 2. Finalizer
+	if isvc.DeletionTimestamp.IsZero() {
+		if !help.ContainsString(isvc.Finalizers, InferenceServiceFinalizer) {
+			isvc.Finalizers = append(isvc.Finalizers, InferenceServiceFinalizer)
+			if err := r.Update(ctx, isvc); err != nil {
+				log.Error(err, "Failed to add finalizer to InferenceService")
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{Requeue: true}, nil
 		}
-		return ctrl.Result{Requeue: true}, nil
+	} else {
+		if help.ContainsString(isvc.Finalizers, InferenceServiceFinalizer) {
+			log.Info("start cleaning up InferenceService resources")
+			// 删除时清理所有关联资源，避免残留
+			_ = r.cleanupCanaryResources(ctx, isvc)
+			_ = r.cleanupStableResources(ctx, isvc)
+			isvc.Finalizers = help.RemoveString(isvc.Finalizers, InferenceServiceFinalizer)
+			if err := r.Update(ctx, isvc); err != nil {
+				log.Error(err, "Failed to remove finalizer from InferenceService")
+				return ctrl.Result{}, err
+			}
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// 3. 超时检查
+	if isvc.Spec.ActiveDeadline > 0 {
+		elapsed := time.Since(isvc.CreationTimestamp.Time).Seconds()
+		if elapsed > float64(isvc.Spec.ActiveDeadline) {
+			r.setStatus(isvc, "Failed", "DeadlineExceeded", "timeout")
+			_ = r.Status().Patch(ctx, isvc, client.MergeFrom(old))
+			return ctrl.Result{}, nil
+		}
 	}
 
 	// 4. 调用 Model Manager 获取模型路径
 	log.Info("Fetching model metadata", "ModelName", isvc.Spec.ModelName, "Version", isvc.Spec.ModelVersion)
-	var modelMeta *modelClient.ModelMetadata
-
-	// 如果模型是自定义镜像,否则用默认推理镜像+模型挂载路径
+	var meta *modelClient.ModelMetadata
 	if r.ModelClient != nil && isvc.Spec.Image == "" {
-		modelMeta, err := r.ModelClient.GetModelMetadata(ctx, isvc.Spec.ModelName, isvc.Spec.ModelVersion)
+		var err error
+		meta, err = r.ModelClient.GetModelMetadata(ctx, isvc.Spec.ModelName, isvc.Spec.ModelVersion)
 		if err != nil {
-			log.Error(err, "unable to fetch model metadata", "ModelName", isvc.Spec.ModelName)
-			// 更新 CR 状态为 "ModelNotReady"
-			_ = r.setModelNotReadyStatus(ctx, isvc, err.Error())
-			// 返回错误，触发 Controller 重试（指数退避）
-			return ctrl.Result{}, err
+			r.setStatus(isvc, "ModelError", "FetchFailed", err.Error())
+			_ = r.Status().Patch(ctx, isvc, client.MergeFrom(old))
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, err
 		}
-		log.Info("Successfully fetched model path", "Path", modelMeta.StoragePath)
-	} else {
-		log.V(1).Info("Model Manager client not configured, skipping metadata fetch")
 	}
 
 	// 5. 协调 Stable Deployment
-	stableDeploy := resources.NewStableDeployment(isvc, modelMeta, r.ModelManagerAddr)
+	stableDeploy := resources.NewStableDeployment(isvc, meta, r.ModelManagerAddr)
 	if err := r.reconcileDeployment(ctx, isvc, stableDeploy); err != nil {
+		r.setStatus(isvc, "Deploying", "StableFailed", err.Error())
+		_ = r.Status().Patch(ctx, isvc, client.MergeFrom(old))
 		log.Error(err, "Failed to reconcile Stable Deployment")
 		return ctrl.Result{}, err
 	}
@@ -95,6 +119,8 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// 6. 协调 Stable Service
 	stableSvc := resources.NewStableService(isvc)
 	if err := r.reconcileService(ctx, isvc, stableSvc); err != nil {
+		r.setStatus(isvc, "Deploying", "StableFailed", err.Error())
+		_ = r.Status().Patch(ctx, isvc, client.MergeFrom(old))
 		log.Error(err, "Failed to reconcile Stable Service")
 		return ctrl.Result{}, err
 	}
@@ -111,7 +137,7 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 
 		// Canary Deployment
-		canaryDeploy := resources.NewCanaryDeployment(isvc, modelMeta, r.ModelManagerAddr)
+		canaryDeploy := resources.NewCanaryDeployment(isvc, meta, r.ModelManagerAddr)
 		if err := r.reconcileDeployment(ctx, isvc, canaryDeploy); err != nil {
 			log.Error(err, "Failed to reconcile Canary Deployment")
 			return ctrl.Result{}, err
@@ -341,25 +367,98 @@ func (r *InferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-// 辅助函数：更新状态为模型未就绪
-func (r *InferenceServiceReconciler) setModelNotReadyStatus(ctx context.Context, isvc *aiv1.InferenceService, msg string) error {
-	// 这里简化处理，实际应使用 metav1.Condition
-	isvc.Status.Ready = false
-	// 可以在 Status 里加一个 Message 字段
-	return r.Status().Update(ctx, isvc)
-}
-
 // cleanupCanaryResources 删除灰度版本的 Deployment
 func (r *InferenceServiceReconciler) cleanupCanaryResources(ctx context.Context, isvc *aiv1.InferenceService) error {
+
 	name := fmt.Sprintf("%s-canary", isvc.Name)
+	// 删除Deployment
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: isvc.Namespace,
 		},
 	}
-	err := r.Delete(ctx, dep)
-	return client.IgnoreNotFound(err)
+	if err := r.Delete(ctx, dep); err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+	// 删除Service
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: isvc.Namespace,
+		},
+	}
+	if err := r.Delete(ctx, service); err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+	// 删除Ingress
+	ingress := &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: isvc.Namespace,
+		},
+	}
+	if err := r.Delete(ctx, ingress); err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+	// 删除HPA
+	hpa := &autoscalingv2.HorizontalPodAutoscaler{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: isvc.Namespace,
+		},
+	}
+	if err := r.Delete(ctx, hpa); err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+	return client.IgnoreNotFound(nil)
+}
+
+// cleanupStableResources 删除稳定版本的 Deployment
+func (r *InferenceServiceReconciler) cleanupStableResources(ctx context.Context, isvc *aiv1.InferenceService) error {
+	name := fmt.Sprintf("%s-stable", isvc.Name)
+	dep := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: isvc.Namespace,
+		},
+	}
+	if err := r.Delete(ctx, dep); err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+	// 删除Service
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: isvc.Namespace,
+		},
+	}
+	if err := r.Delete(ctx, service); err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+
+	// 删除Ingress
+	ingress := &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: isvc.Namespace,
+		},
+	}
+	if err := r.Delete(ctx, ingress); err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+
+	// 删除HPA
+	hpa := &autoscalingv2.HorizontalPodAutoscaler{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: isvc.Namespace,
+		},
+	}
+	if err := r.Delete(ctx, hpa); err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+	return nil
 }
 
 func (r *InferenceServiceReconciler) updateMetrics(isvc *aiv1.InferenceService) {
@@ -374,4 +473,15 @@ func (r *InferenceServiceReconciler) updateMetrics(isvc *aiv1.InferenceService) 
 			isvc.Spec.ModelVersion,
 			fmt.Sprintf("%s-canary", isvc.Name))
 	}
+}
+
+func (r *InferenceServiceReconciler) setStatus(isvc *aiv1.InferenceService, s, reason, msg string) {
+	isvc.Status.StableState = s
+	isvc.Status.Conditions = []metav1.Condition{{
+		Type:               "Ready",
+		Status:             metav1.ConditionFalse,
+		LastTransitionTime: metav1.Now(),
+		Reason:             reason,
+		Message:            msg,
+	}}
 }

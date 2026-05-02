@@ -33,6 +33,7 @@ type (
 		ErrorMessage  string                 `json:"error_message,optional"`
 	}
 	SubmitInferenceReq {
+		RequestID    string                 `json:"request_id"`
 		ModelName    string                 `json:"model_name"`
 		ModelVersion string                 `json:"model_version"`
 		Resources    ResourceRequest        `json:"resources"`
@@ -111,7 +112,6 @@ type (
 	}
 	CallBackTaskStatusReq {
 		TaskID   string `json:"task_id"`
-		Name     string `json:"name"`
 		Status   string `json:"status"`
 		TaskType string `json:"task_type,options=inference|training"`
 	}

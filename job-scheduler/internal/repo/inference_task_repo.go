@@ -26,8 +26,8 @@ func (r *InferenceTaskRepo) Update(ctx context.Context, task *model.InferenceTas
 	return r.db.WithContext(ctx).Save(task).Error
 }
 
-func (r *InferenceTaskRepo) Delete(ctx context.Context, task *model.InferenceTask) error {
-	return r.db.WithContext(ctx).Delete(task).Error
+func (r *InferenceTaskRepo) Delete(ctx context.Context, taskID string) error {
+	return r.db.WithContext(ctx).Where("task_id = ?", taskID).Delete(&model.InferenceTask{}).Error
 }
 
 func (r *InferenceTaskRepo) GetByTaskID(ctx context.Context, taskID string) (*model.InferenceTask, error) {

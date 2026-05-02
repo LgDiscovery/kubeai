@@ -57,11 +57,7 @@ func main() {
 	}
 
 	// 启动消费者
-	go startInferenceConsumer(rootCtx, ctx)
-	go startTrainingConsumer(rootCtx, ctx)
-	go startDeadLetterConsumer(rootCtx, ctx)
-	go startInferencePendingClaim(rootCtx, ctx)
-	go startTrainingPendingClaim(rootCtx, ctx)
+	Start(rootCtx, ctx)
 
 	// 启动控制器管理器
 	go func() {
@@ -111,6 +107,21 @@ func main() {
 	server.Start()
 }
 
+// Start 启动消费者
+func Start(rootCtx context.Context, ctx *svc.ServiceContext) {
+	go startInferenceConsumer(rootCtx, ctx)
+	go startTrainingConsumer(rootCtx, ctx)
+	go startDeadLetterConsumer(rootCtx, ctx)
+	go startInferencePendingClaim(rootCtx, ctx)
+	go startTrainingPendingClaim(rootCtx, ctx)
+	<-rootCtx.Done()
+	logx.Infof("inference task consumer stopped")
+	logx.Infof("training task consumer stopped")
+	logx.Infof("dead letter task consumer stopped")
+	logx.Infof("inference pending claim task consumer stopped")
+	logx.Infof("training pending claim task consumer stopped")
+}
+
 func startInferenceConsumer(rootCtx context.Context, ctx *svc.ServiceContext) {
 	consumerLogic := logic.NewConsumerLogic(rootCtx, ctx, ctx.Config.Redis.Streams.Inference)
 	ctx.InferenceQueue.Consume(rootCtx, "inference-consumer",
@@ -129,7 +140,7 @@ func startTrainingConsumer(rootCtx context.Context, ctx *svc.ServiceContext) {
 
 func startDeadLetterConsumer(rootCtx context.Context, ctx *svc.ServiceContext) {
 	consumerLogic := logic.NewConsumerLogic(rootCtx, ctx, ctx.Config.Redis.Streams.DeadLetter)
-	ctx.DeadLetterQueue.Pop(rootCtx, "dead-letter-consumer",
+	ctx.DeadLetterQueue.Pop(rootCtx, "dead-letter-consumer", ctx.Config.Redis.MaxRetries,
 		func(taskID string, data []byte, taskType string) error {
 			if taskType == "training" {
 				return consumerLogic.ProcessTrainingTask(taskID, data)

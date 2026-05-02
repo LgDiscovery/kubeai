@@ -76,7 +76,7 @@ func NewCanaryIngress(isvc *aiv1.InferenceService) *networkingv1.Ingress {
 	pathType := networkingv1.PathTypePrefix
 	ing := &networkingv1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        isvc.Name,
+			Name:        isvc.Name + "-canary",
 			Namespace:   isvc.Namespace,
 			Annotations: annotations,
 			OwnerReferences: []metav1.OwnerReference{

@@ -79,7 +79,7 @@ func (q *TaskQueue) Push(ctx context.Context, taskID string, data []byte, priori
 	})
 	// 同时存一份 kv(用于快速查询)
 	cacheKey := q.cacheKey + taskID
-	q.client.Set(ctx, cacheKey, data, 24*time.Hour)
+	tx.Set(ctx, cacheKey, data, 24*time.Hour)
 
 	// 执行事务
 	_, err := tx.Exec(ctx)
@@ -112,7 +112,7 @@ func (q *TaskQueue) Consume(ctx context.Context, consumerName string, handler fu
 				Group:    q.group,
 				Consumer: consumerName,
 				Streams:  []string{q.streamKey, ">"},
-				Count:    1,
+				Count:    10,
 				Block:    1 * time.Second,
 			}).Result()
 			if err != nil || len(streams) == 0 || len(streams[0].Messages) == 0 {
@@ -223,6 +223,6 @@ func (q *TaskQueue) GetTask(ctx context.Context, taskID string) ([]byte, error) 
 }
 
 // DeleteTask 手动删除任务
-func (q *TaskQueue) DeleteTask(ctx context.Context, taskID string) {
-	q.ackAndRemove(ctx, "", taskID)
+func (q *TaskQueue) DeleteTask(ctx context.Context, msgID, taskID string) {
+	q.ackAndRemove(ctx, msgID, taskID)
 }

@@ -77,6 +77,10 @@ type TrainingJobSpec struct {
 	EnableLogs    bool `json:"enableLogging,omitempty"`
 	// 调度节点名称（由调度中心填充）
 	NodeName string `json:"nodeName,omitempty"`
+	// 节点选择器
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	// 容忍器
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
 }
 
 // ResourceRequirements 资源定义

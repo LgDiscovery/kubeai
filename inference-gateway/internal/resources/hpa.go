@@ -19,7 +19,7 @@ func NewHPA(isvc *aiv1.InferenceService) *autoscalingv2.HorizontalPodAutoscaler 
 		metrics = append(metrics, autoscalingv2.MetricSpec{
 			Type: autoscalingv2.ResourceMetricSourceType,
 			Resource: &autoscalingv2.ResourceMetricSource{
-				Name: corev1.ResourceMemory,
+				Name: corev1.ResourceCPU,
 				Target: autoscalingv2.MetricTarget{
 					Type:               autoscalingv2.UtilizationMetricType,
 					AverageUtilization: isvc.Spec.Autoscaling.TargetCPUUtilization,

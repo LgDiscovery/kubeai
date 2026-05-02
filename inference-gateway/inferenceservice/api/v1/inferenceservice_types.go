@@ -24,6 +24,8 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+// +kubebuilder:validation:XValidation:rule="self.replicas == null || self.replicas >=0",message="replicas must >=0"
+// +kubebuilder:validation:XValidation:rule="self.modelName != ”",message="modelName required"
 // InferenceServiceSpec defines the desired state of InferenceService
 type InferenceServiceSpec struct {
 	// 模型信息
@@ -49,7 +51,9 @@ type InferenceServiceSpec struct {
 	Canary *CanarySpec `json:"canary,omitempty"`
 
 	// 服务暴露
-	Service *ServiceSpec `json:"service,omitempty"`
+	Service        *ServiceSpec `json:"service,omitempty"`
+	ModelPath      string       `json:"modelPath,omitempty"`
+	ActiveDeadline int64        `json:"activeDeadline,omitempty"`
 }
 
 type AutoscalingSpec struct {
@@ -93,21 +97,16 @@ type InferenceServiceStatus struct {
 	ReadyReplicas int32              `json:"readyReplicas,omitempty"` // 当前副本数
 	Ready         bool               `json:"ready"`                   // 服务是否就绪
 	//最后更新时间
-	LastUpdateTime metav1.Time `json:"lastUpdateTime,omitempty"`
+	LastUpdateTime  metav1.Time `json:"lastUpdateTime,omitempty"`
+	RegisteredModel string      `json:"registeredModel,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:path=inferenceservices,scope=Namespaced
-// +kubebuilder:printcolumn:name="Model",type=string,JSONPath=`.spec.modelName`
-// +kubebuilder:printcolumn:name="Version",type=string,JSONPath=`.spec.modelVersion`
-// +kubebuilder:printcolumn:name="URL",type=string,JSONPath=`.status.url`
-// +kubebuilder:printcolumn:name="ReadyReplicas",type=string,JSONPath=`.status.readyReplicas`
-// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.ready`
-// +kubebuilder:printcolumn:name="StableState",type=string,JSONPath=`.status.stableState`
-// +kubebuilder:printcolumn:name="CanaryState",type=string,JSONPath="`.status.canaryState`
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
-
+// +kubebuilder:printcolumn:name="Model",type="string",JSONPath=".spec.modelName"
+// +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".spec.modelVersion"
+// +kubebuilder:printcolumn:name="Ready",type="boolean",JSONPath=".status.ready"
+// +kubebuilder:resource:shortName=isvc
 // InferenceService is the Schema for the inferenceservices API
 type InferenceService struct {
 	metav1.TypeMeta `json:",inline"`
@@ -125,7 +124,6 @@ type InferenceService struct {
 }
 
 // +kubebuilder:object:root=true
-
 // InferenceServiceList contains a list of InferenceService
 type InferenceServiceList struct {
 	metav1.TypeMeta `json:",inline"`

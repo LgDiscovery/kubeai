@@ -112,7 +112,7 @@ func (q *TaskQueue) Consume(ctx context.Context, consumerName string, handler fu
 				Group:    q.group,
 				Consumer: consumerName,
 				Streams:  []string{q.streamKey, ">"},
-				Count:    1,
+				Count:    10,
 				Block:    1 * time.Second,
 			}).Result()
 			if err != nil || len(streams) == 0 || len(streams[0].Messages) == 0 {

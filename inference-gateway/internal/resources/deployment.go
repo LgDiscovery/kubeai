@@ -8,7 +8,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	aiv1 "kubeai-inference-gateway/inferenceservice/api/v1"
 	modelmanager "kubeai-inference-gateway/internal/client"
-	"os"
 	"strconv"
 )
 
@@ -54,7 +53,7 @@ func ConvertEnvVars(meta *modelmanager.ModelMetadata, modelManagerAddr string) [
 }
 
 // ConvertInitContainers 构建初始化容器列表
-func ConvertInitContainers(modelManagerAddr string) []corev1.Container {
+func ConvertInitContainers(modelManagerAddr string, meta *modelmanager.ModelMetadata) []corev1.Container {
 	// 初始化容器，用于模型下载
 	initContainer := corev1.Container{
 		Name:    "model-downloader",
@@ -69,7 +68,7 @@ func ConvertInitContainers(modelManagerAddr string) []corev1.Container {
 					exit 1
 				fi
 				echo "SUCCESS: 模型拉取完成"
-			`, modelManagerAddr, os.Getenv("MODEL_NAME"), os.Getenv("MODEL_VERSION")),
+			`, modelManagerAddr, meta.ModelName, meta.ModelVersion),
 		},
 		VolumeMounts: []corev1.VolumeMount{{Name: "model-storage", MountPath: "/models"}},
 	}
@@ -190,6 +189,7 @@ func ConvertStableContainers(isvc *aiv1.InferenceService, meta *modelmanager.Mod
 			Env:            ConvertEnvVars(meta, modelManagerAddr), // 【关键】注入环境变量
 			LivenessProbe:  ConvertLivenessProbe(isvc.Spec.Service.Port),
 			ReadinessProbe: ConvertReadinessProbe(isvc.Spec.Service.Port),
+			Lifecycle:      ConvertLifecycle(),
 		},
 	}
 }
@@ -225,11 +225,11 @@ func ConvertCanaryContainers(isvc *aiv1.InferenceService, meta *modelmanager.Mod
 // ConvertLabels 构建标签
 func ConvertLabels(isvc *aiv1.InferenceService, meta *modelmanager.ModelMetadata) map[string]string {
 	labels := make(map[string]string)
-	labels[LabelKeyApp] = meta.ModelName
+	labels[LabelKeyApp] = isvc.Name
 	labels[LabelKeyVersion] = meta.ModelVersion
 	labels[LabelKeyFramework] = meta.Framework
 	labels[LabelManagedBy] = "kubeai-platform"
-	if isvc.Spec.Canary.Enabled {
+	if isvc.Spec.Canary != nil && isvc.Spec.Canary.Enabled {
 		labels[LabelKeyRole] = "canary"
 	} else {
 		labels[LabelKeyRole] = "stable"
@@ -263,7 +263,7 @@ func NewStableDeployment(isvc *aiv1.InferenceService, meta *modelmanager.ModelMe
 					},
 				},
 				Spec: corev1.PodSpec{
-					InitContainers: ConvertInitContainers(modelManagerAddr),
+					InitContainers: ConvertInitContainers(modelManagerAddr, meta),
 					Containers:     ConvertStableContainers(isvc, meta, modelManagerAddr),
 					Volumes:        ConvertVolumes(),
 				},
@@ -298,7 +298,7 @@ func NewCanaryDeployment(isvc *aiv1.InferenceService, meta *modelmanager.ModelMe
 					},
 				},
 				Spec: corev1.PodSpec{
-					InitContainers: ConvertInitContainers(modelManagerAddr),
+					InitContainers: ConvertInitContainers(modelManagerAddr, meta),
 					Containers:     ConvertCanaryContainers(isvc, meta, modelManagerAddr),
 					Volumes:        ConvertVolumes(),
 				},

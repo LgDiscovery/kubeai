@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/redis/go-redis/v9"
 	"github.com/zeromicro/go-zero/core/logx"
+	"strconv"
 	"time"
 )
 
@@ -78,8 +79,11 @@ func (d *DeadLetterQueue) Push(ctx context.Context, taskID string,
 }
 
 // Pop 消费死信队列（阻塞式消费，支持优雅退出）
-func (d *DeadLetterQueue) Pop(ctx context.Context, consumerName string, handler func(taskID string, data []byte, taskType string) error) {
+func (d *DeadLetterQueue) Pop(ctx context.Context, consumerName string, maxRetry int, handler func(taskID string, data []byte, taskType string) error) {
 	logx.Infof("dead letter consumer[%s] started, stream: %s", consumerName, d.streamKey)
+	if maxRetry <= 0 {
+		maxRetry = 3
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -116,8 +120,11 @@ func (d *DeadLetterQueue) Pop(ctx context.Context, consumerName string, handler 
 					d.ackMessage(ctx, msg.ID)
 					continue
 				}
+				// 获取重试次数
+				retryCountStr, _ := d.safeGetString(msg.Values, "retry_count")
+				retryCount, _ := strconv.Atoi(retryCountStr)
 				reason, _ := d.safeGetString(msg.Values, "reason")
-				logx.Infof("processing dead letter task[%s], reason: %s", taskID, reason)
+				logx.Infof("processing dead letter task[%s], retry: %d/%d, reason: %s", taskID, retryCount, maxRetry, reason)
 
 				if err := handler(taskID, data, taskType); err == nil {
 					// 处理成功：确认消息，永久删除
@@ -125,7 +132,27 @@ func (d *DeadLetterQueue) Pop(ctx context.Context, consumerName string, handler 
 					logx.Infof("dead letter task[%s] processed successfully", taskID)
 				} else {
 					logx.Errorf("handle task %s failed: %v", taskID, err)
-					// 处理失败不 ACK，消息会留在 pending 列表，后续可重试
+					logx.Errorf("handle dead letter task %s failed: %v", taskID, err)
+					retryCount++
+					if retryCount >= maxRetry {
+						// 超过最大重试次数，ACK消息，记录告警
+						d.ackMessage(ctx, msg.ID)
+						logx.Errorf("dead letter task[%s] exceeded max retry, dropped", taskID)
+					} else {
+						// 未超过，更新重试次数，不ACK，下次继续处理
+						_, _ = d.client.XAdd(ctx, &redis.XAddArgs{
+							Stream: d.streamKey,
+							Values: map[string]interface{}{
+								"task_id":     taskID,
+								"data":        data,
+								"reason":      fmt.Sprintf("retry failed: %v", err),
+								"task_type":   taskType,
+								"retry_count": retryCount,
+								"time":        time.Now().UnixMilli(),
+							},
+						}).Result()
+						d.ackMessage(ctx, msg.ID)
+					}
 				}
 			}
 		}

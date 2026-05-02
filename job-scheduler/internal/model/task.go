@@ -62,7 +62,7 @@ func (m *JSONMap) Scan(value interface{}) error {
 type InferenceTask struct {
 	ID            int64           `gorm:"primaryKey;autoIncrement" json:"-"`
 	TaskID        string          `gorm:"column:task_id;type:varchar(64);uniqueIndex;not null" json:"task_id"`
-	Name          string          `gorm:"column:name;type:varchar(255);uniqueIndex;not null" json:"name"`
+	RequestID     string          `gorm:"column:request_id;type:varchar(255);uniqueIndex;not null" json:"request_id"`
 	ModelName     string          `gorm:"column:model_name;type:varchar(255);not null" json:"model_name"`
 	ModelVersion  string          `gorm:"column:model_version;type:varchar(50);not null" json:"model_version"`
 	ModelPath     string          `gorm:"column:model_path;type:text" json:"model_path"`

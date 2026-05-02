@@ -5,7 +5,6 @@ package types
 
 type CallBackTaskStatusReq struct {
 	TaskID   string `json:"task_id"`
-	Name     string `json:"name"`
 	Status   string `json:"status"`
 	TaskType string `json:"task_type,options=inference|training"`
 }
@@ -74,6 +73,7 @@ type ResourceRequest struct {
 }
 
 type SubmitInferenceReq struct {
+	RequestID    string                 `json:"request_id"`
 	ModelName    string                 `json:"model_name"`
 	ModelVersion string                 `json:"model_version"`
 	Resources    ResourceRequest        `json:"resources"`
