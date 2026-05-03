@@ -1,0 +1,41 @@
+Name: model-manager
+Host: 0.0.0.0
+Port: 58080
+
+# 服务注册与发现
+Etcd:
+  Hosts:
+    - "etcd.kubeai.svc.cluster.local:2379"
+  Key: "kubeai.services.model-manager"
+
+# 数据库配置
+Database:
+  Host: "postgres.kubeai.svc.cluster.local"
+  Port: 5432
+  User: "postgres"
+  Password: "postgres"
+  DBName: "kubeai_platform"
+  SSLMode: "disable"
+  MaxIdleConns: 10
+  MaxOpenConns: 100
+
+# MinIO 配置
+MinIO:
+  Endpoint: "minio.kubeai.svc.cluster.local:9000"
+  AccessKey: "minioadmin"
+  SecretKey: "minioadmin"
+  Bucket: "models"
+  UseSSL: false
+
+# 日志
+Log:
+  ServiceName: kubeai-model-manager
+  Mode: console
+  Level: info
+  Encoding: json
+  TimeFormat: "2006-01-02T15:04:05.000Z07:00"
+
+# 指标
+Metrics:
+  Enabled: true
+  Path: "/api/v1/models/metrics"

@@ -1,0 +1,76 @@
+Name: inference-gateway
+Host: 0.0.0.0
+Port: 58082
+
+Etcd:
+  Hosts:
+    - "etcd.kubeai.svc.cluster.local:2379"
+  Key: "kubeai.services.inference-gateway"
+
+Redis:
+  RedisConf:
+    Host: "redis-redis-cluster-0.redis-redis-cluster-headless.kubeai.svc.cluster.local:6379,redis-redis-cluster-1.redis-redis-cluster-headless.kubeai.svc.cluster.local:6379,redis-redis-cluster-2.redis-redis-cluster-headless.kubeai.svc.cluster.local:6379"
+    Type: cluster
+    User: "redis"
+    Pass: "redis123"
+    Tls: false
+    NonBlock: true
+    PingTimeout: 1s
+  Streams:
+    Inference: "kubeai:inference:task"
+    Training: "kubeai:training:task"
+    DeadLetter: "kubeai:deadLetter:task"
+  ConsumerGroup: "inference-gateway"
+  MaxRetries: 3
+  Expiration: 24h
+  RetryBackoff: 1000 #ms
+
+# 数据库配置
+Database:
+  Host: "postgres.kubeai.svc.cluster.local"
+  Port: 5432
+  User: "postgres"
+  Password: "postgres"
+  DBName: "kubeai_platform"
+  SSLMode: "disable"
+  MaxIdleConns: 10
+  MaxOpenConns: 100
+
+# 模型管理器配置
+ModelManager:
+  URL: "http://model-manager.kubeai.svc.cluster.local:58080"
+  Timeout: 5s
+
+JobSchedule:
+  URL: "http://job-schedule.kubeai.svc.cluster.local:58081"
+  Timeout: 5s
+
+
+K8s:
+  Namespace: "kubeai"
+  InferenceJobImage: "tensorflow/serving:2.15.0"
+  TrainingJobImage: "kubeflow/training-operator:v1"
+
+Scheduler:
+  Algorithm: "binpack" // spread, gpu-affinity 可配置CacheLabelPrefix, 默认 binpack
+  EnableGPUPacking: true
+  GPUBinpackWeight: 0.7
+
+ResourceSync:
+  Interval: 10s
+
+Log:
+  ServiceName: kubeai-inference-gateway
+  Mode: console
+  Level: info
+  Encoding: json
+  TimeFormat: "2006-01-02T15:04:05.000Z07:00"
+
+Metrics:
+  Enabled: true
+  Path: "/metrics"
+
+
+MinIO:
+  DatasetPvc: "minio-dataset-pvc"
+  OutputPvc: "minio-output-pvc"
