@@ -14,7 +14,7 @@ import (
 	"net/http"
 )
 
-var configFile = flag.String("f", "etc/model-manager.yaml", "the config file")
+var configFile = flag.String("f", "etc/model-manager-service.yaml", "the config file")
 
 func Server() {
 	flag.Parse()

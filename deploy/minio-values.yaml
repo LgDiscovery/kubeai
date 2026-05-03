@@ -1,0 +1,29 @@
+global:
+  namespaceOverride: kubeai
+minio:
+  accessKey: minioadmin
+  secretKey: minioadmin
+  defaultBucket:
+    enabled: true
+    name: models
+    policy: none
+    versioning: false
+  service:
+    port: 9000
+    type: ClusterIP
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  persistence:
+    enabled: true
+    size: 10Gi
+  metrics:
+    enabled: true
+  console:
+    enabled: true
+    service:
+      port: 9001

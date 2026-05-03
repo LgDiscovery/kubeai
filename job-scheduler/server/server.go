@@ -12,7 +12,7 @@ import (
 	"kubeai-job-scheduler/internal/svc"
 )
 
-var configFile = flag.String("f", "etc/job-scheduler.yaml", "the config file")
+var configFile = flag.String("f", "etc/job-scheduler-service.yaml", "the config file")
 
 func Start() {
 	flag.Parse()

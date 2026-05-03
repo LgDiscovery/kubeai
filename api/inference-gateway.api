@@ -1,0 +1,77 @@
+syntax = "v1"
+
+info (
+	title:   "KubeAI 推理网关"
+	desc:    "推理/训练任务消费、训练任务管理、CRD 生命周期控制"
+	author:  "KubeAI liu.guang"
+	version: "v1.0.0"
+)
+
+type (
+	// 推理请求
+	InferenceRequest {
+		// 推理模型名称
+		ModelName string `json:"model_name"`
+		// model version
+		ModelVersion string `json:"model_version,optional"`
+		// 推理输入
+		Input map[string]interface{} `json:"input"`
+		// 推理框架
+		Framework string `json:"framework,optional"`
+	}
+	// 推理响应
+	InferenceResponse {
+		// 任务ID
+		TaskID string `json:"task_id"`
+		// 推理输出
+		Result map[string]interface{} `json:"result"`
+	}
+	// 任务控制
+	ControlReq {
+		TaskID   string `json:"task_id"`
+		TaskType string `json:"task_type"` // inference/training
+	}
+	CommonResp {
+		Code    int         `json:"code"`
+		Message string      `json:"message"`
+		Data    interface{} `json:"data,optional"`
+	}
+)
+
+@server (
+	prefix:     /api/v1/inference
+	group:      inference
+	middleware: MetricsMiddleware
+)
+service inference_gateway {
+	@handler InferenceHandler
+	post /execute (InferenceRequest) returns (InferenceResponse)
+
+	@handler CancelTrainingHandler
+	post /control/tasks/:task_id/cancel (ControlReq) returns (CommonResp)
+
+	@handler PauseTrainingHandler
+	post /control/tasks/:task_id/pause (ControlReq) returns (CommonResp)
+
+	@handler ResumeTrainingHandler
+	post /control/tasks/:task_id/resume (ControlReq) returns (CommonResp)
+
+	@handler RetryTaskHandler
+	post /control/tasks/:task_id/retry (ControlReq) returns (CommonResp)
+}
+
+@server (
+	prefix: /api/v1/inference
+	group:  health
+)
+service inference_gateway {
+	@handler HealthHandler
+	get /health returns (CommonResp)
+
+	@handler ReadyHandler
+	get /ready returns (CommonResp)
+
+	@handler MetricsHandler
+	get /metrics returns (CommonResp)
+}
+

@@ -1,0 +1,48 @@
+global:
+  namespaceOverride: kubeai
+prometheus:
+  enabled: true
+  prometheusSpec:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: 1Gi
+        memory: 2Gi
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: [ "ReadWriteOnce" ]
+          resources:
+            requests:
+              storage: 10Gi
+    serviceMonitorSelector:
+      matchLabels:
+        app.kubernetes.io/part-of: kubeai
+    additionalScrapeConfigs:
+      - job_name: 'kubeai-gateway'
+        static_configs:
+          - targets: ['kubeai-gateway.kubeai.svc.cluster.local:8080']
+        metrics_path: /api/v1/metrics
+      - job_name: 'kubeai-model-manager'
+        static_configs:
+          - targets: ['model-manager.kubeai.svc.cluster.local:58080']
+        metrics_path: /api/v1/models/metrics
+      - job_name: 'kubeai-inference-gateway'
+        static_configs:
+          - targets: ['inference-gateway.kubeai.svc.cluster.local:58082']
+        metrics_path: /metrics
+      - job_name: 'kubeai-job-scheduler'
+        static_configs:
+          - targets: ['job-scheduler.kubeai.svc.cluster.local:58081']
+        metrics_path: /metrics
+alertmanager:
+  enabled: false
+pushgateway:
+  enabled: false
+nodeExporter:
+  enabled: false
+kubeStateMetrics:
+  enabled: false

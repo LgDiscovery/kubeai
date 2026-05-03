@@ -70,13 +70,6 @@ service gateway {
 	)
 	@handler RegisterHandler
 	post /register (RegisterRequest) returns (RegisterResponse)
-
-	@doc (
-		title: "健康检查"
-		desc:  "获取健康检查状态"
-	)
-	@handler HealthHandler
-	get /health returns (GeneralResponse)
 }
 
 // 指标暴露（无需鉴权）

@@ -1,0 +1,31 @@
+global:
+  namespaceOverride: kubeai
+postgresql:
+  auth:
+    username: postgres
+    password: postgres
+    database: kubeai_platform
+    postgresPassword: postgres
+  primary:
+    service:
+      port: 5432
+    containerSecurityContext:
+      enabled: true
+      runAsUser: 0
+    configuration:
+      ssl:
+        mode: disable
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+    persistence:
+      enabled: true
+      size: 10Gi
+  replica:
+    enabled: false
+  metrics:
+    enabled: true

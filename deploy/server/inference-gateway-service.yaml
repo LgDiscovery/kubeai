@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inference-gateway
+  namespace: kubeai
+  labels:
+    app: inference-gateway
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: inference-gateway
+  template:
+    metadata:
+      labels:
+        app: inference-gateway
+    spec:
+      containers:
+        - name: inference-gateway
+          image: docker.io/lg-discovery/kubeai-inference-gateway:v1.0.0 # 需替换为真实的 inference-gateway 镜像
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 58082
+          env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: kubeai-secrets
+                  key: POSTGRES_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kubeai-secrets
+                  key: POSTGRES_PASSWORD
+            - name: REDIS_USER
+              valueFrom:
+                secretKeyRef:
+                  name: kubeai-secrets
+                  key: REDIS_USER
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kubeai-secrets
+                  key: REDIS_PASSWORD
+          volumeMounts:
+            - name: config
+              mountPath: /app/etc
+              readOnly: true
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+            requests:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: 58082
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: 58082
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: config
+          configMap:
+            name: kubeai-config
+            items:
+              - key: inference-gateway.yaml
+                path: inference-gateway.yaml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: inference-gateway
+  namespace: kubeai
+spec:
+  selector:
+    app: inference-gateway
+  ports:
+    - port: 58082
+      targetPort: 58082
+  type: ClusterIP

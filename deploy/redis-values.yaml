@@ -1,0 +1,31 @@
+global:
+  namespaceOverride: kubeai
+redisCluster:
+  enabled: true
+  cluster:
+    nodes: 3
+    replicas: 1
+  auth:
+    enabled: true
+    username: redis
+    password: redis123
+  tls:
+    enabled: false
+  containerSecurityContext:
+    enabled: true
+    runAsUser: 0
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  persistence:
+    enabled: true
+    size: 5Gi
+  service:
+    type: ClusterIP
+    port: 6379
+  metrics:
+    enabled: true

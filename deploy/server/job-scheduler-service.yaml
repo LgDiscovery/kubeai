@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: job-scheduler
+  namespace: kubeai
+  labels:
+    app: job-scheduler
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: job-scheduler
+  template:
+    metadata:
+      labels:
+        app: job-scheduler
+    spec:
+      containers:
+        - name: job-scheduler
+          image: docker.io/lg-discovery/kubeai-job-scheduler:v1.0.0 # 需替换为真实的 job-scheduler 镜像
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 58081
+          env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: kubeai-secrets
+                  key: POSTGRES_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kubeai-secrets
+                  key: POSTGRES_PASSWORD
+            - name: REDIS_USER
+              valueFrom:
+                secretKeyRef:
+                  name: kubeai-secrets
+                  key: REDIS_USER
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kubeai-secrets
+                  key: REDIS_PASSWORD
+          volumeMounts:
+            - name: config
+              mountPath: /app/etc
+              readOnly: true
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+            requests:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: 58081
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: 58081
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: config
+          configMap:
+            name: kubeai-config
+            items:
+              - key: job-scheduler.yaml
+                path: job-scheduler.yaml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: job-scheduler
+  namespace: kubeai
+spec:
+  selector:
+    app: job-scheduler
+  ports:
+    - port: 58081
+      targetPort: 58081
+  type: ClusterIP

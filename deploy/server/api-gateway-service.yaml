@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: kubeai
+  labels:
+    app: api-gateway
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+    spec:
+      containers:
+        - name: api-gateway
+          image: docker.io/lg-discovery/kubeai-api-gateway:v1.0.0 # 需替换为真实的 api-gateway 镜像
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: kubeai-secrets
+                  key: POSTGRES_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kubeai-secrets
+                  key: POSTGRES_PASSWORD
+          volumeMounts:
+            - name: config
+              mountPath: /app/etc
+              readOnly: true
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+            requests:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /api/v1/metrics
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /api/v1/metrics
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: config
+          configMap:
+            name: kubeai-config
+            items:
+              - key: api-gateway.yaml
+                path: api-gateway.yaml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kubeai-gateway
+  namespace: kubeai
+spec:
+  selector:
+    app: kubeai-gateway
+  ports:
+    - port: 8080
+      targetPort: 8080
+  type: NodePort # 如需对外暴露，可改为 NodePort/LoadBalancer

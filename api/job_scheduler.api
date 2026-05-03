@@ -1,0 +1,173 @@
+syntax = "v1"
+
+info (
+	title:   "KubeAI 任务调度中心"
+	desc:    "推理/训练任务统一下发队列，任务管理"
+	author:  "KubeAI liu.guang"
+	version: "v1.0.0"
+)
+
+type (
+	// 通用资源请求
+	ResourceRequest {
+		CPU    string `json:"cpu,optional"`
+		Memory string `json:"memory,optional"`
+		GPU    string `json:"gpu,optional"`
+	}
+	// 推理任务
+	InferenceTask {
+		TaskID        string                 `json:"task_id"`
+		ModelName     string                 `json:"model_name"`
+		ModelVersion  string                 `json:"model_version"`
+		Resources     ResourceRequest        `json:"resources"`
+		InputData     map[string]interface{} `json:"input_data"`
+		OutputTopic   string                 `json:"output_topic,optional"`
+		Status        string                 `json:"status"`
+		Priority      int                    `json:"priority"`
+		RetryCount    int                    `json:"retry_count"`
+		MaxRetries    int                    `json:"max_retries"`
+		CreateTime    string                 `json:"create_time"`
+		UpdateTime    string                 `json:"update_time"`
+		ScheduledNode string                 `json:"scheduled_node,optional"`
+		PodName       string                 `json:"pod_name,optional"`
+		ErrorMessage  string                 `json:"error_message,optional"`
+	}
+	SubmitInferenceReq {
+		RequestID    string                 `json:"request_id"`
+		ModelName    string                 `json:"model_name"`
+		ModelVersion string                 `json:"model_version"`
+		Resources    ResourceRequest        `json:"resources"`
+		InputData    map[string]interface{} `json:"input_data"`
+		OutputTopic  string                 `json:"output_topic,optional"`
+		Priority     int                    `json:"priority"`
+		MaxRetries   int                    `json:"max_retries"`
+	}
+	InferenceTaskResp {
+		TaskID  string `json:"task_id"`
+		Status  string `json:"status"`
+		Message string `json:"message"`
+	}
+	GetInferenceTaskReq {
+		TaskID string `json:"task_id"`
+	}
+	// 训练任务
+	TrainingTask {
+		TaskID       string          `json:"task_id"`
+		Name         string          `json:"name"`
+		ModelName    string          `json:"model_name,optional"`
+		Framework    string          `json:"framework"`
+		Command      []string        `json:"command"`
+		Args         []string        `json:"args"`
+		Resources    ResourceRequest `json:"resources"`
+		DatasetPath  string          `json:"dataset_path,optional"`
+		OutputPath   string          `json:"output_path,optional"`
+		Status       string          `json:"status"`
+		Priority     int             `json:"priority"`
+		RetryCount   int             `json:"retry_count"`
+		MaxRetries   int             `json:"max_retries"`
+		CreatedAt    string          `json:"created_at"`
+		UpdatedAt    string          `json:"updated_at"`
+		PodName      string          `json:"pod_name,optional"`
+		ErrorMessage string          `json:"error_message,optional"`
+	}
+	SubmitTrainingReq {
+		RequestID     string          `json:"request_id"`
+		Name          string          `json:"name"`
+		ModelName     string          `json:"model_name,optional"`
+		Framework     string          `json:"framework"`
+		Image         string          `json:"image"`
+		Command       []string        `json:"command"`
+		Args          []string        `json:"args"`
+		Resources     ResourceRequest `json:"resources"`
+		Distributed   bool            `json:"distributed,optional"`
+		WorkerNum     int32           `json:"worker_num,optional"`
+		MasterNum     int32           `json:"master_num,optional"`
+		Env           []EnvVar        `json:"env,optional"`
+		DatasetPath   string          `json:"dataset_path,optional"`
+		OutputPath    string          `json:"output_path,optional"`
+		Priority      int             `json:"priority,default=5"`
+		MaxRetries    int             `json:"max_retries,default=3"`
+		EnableMonitor bool            `json:"enable_monitor,omitempty"`
+		EnableLogs    bool            `json:"enable_logs,omitempty"`
+	}
+	TrainingTaskResp {
+		TaskID  string `json:"task_id"`
+		Status  string `json:"status"`
+		Message string `json:"message"`
+	}
+	GetTrainingTaskReq {
+		TaskID string `json:"task_id"`
+	}
+	ListTasksReq {
+		TaskType string `form:"task_type,options=inference|training"` // 推理或训练
+		Status   string `form:"status,optional"`
+		Page     int    `form:"page,default=1"`
+		PageSize int    `form:"page_size,default=20"`
+	}
+	ListTasksResp {
+		Items    []interface{} `json:"items"` // InferenceTask 或 TrainingTask
+		Total    int64         `json:"total"`
+		Page     int           `json:"page"`
+		PageSize int           `json:"page_size"`
+	}
+	CallBackTaskStatusReq {
+		TaskID   string `json:"task_id"`
+		Status   string `json:"status"`
+		TaskType string `json:"task_type,options=inference|training"`
+	}
+	// 通用响应
+	CommonResp {
+		Code    int         `json:"code"`
+		Message string      `json:"message"`
+		Data    interface{} `json:"data,optional"`
+	}
+	EnvVar {
+		Name  string `json:"name"`
+		Value string `json:"value"`
+	}
+)
+
+@server (
+	prefix:     "/api/v1/jobs"
+	group:      "job_scheduler"
+	middleware: MetricsMiddleware
+)
+service job_scheduler {
+	// 推理任务
+	@handler SubmitInferenceTaskHandler
+	post /inference/tasks (SubmitInferenceReq) returns (InferenceTaskResp)
+
+	@handler GetInferenceTaskHandler
+	get /inference/tasks/:task_id (GetInferenceTaskReq) returns (InferenceTask)
+
+	// 训练任务
+	@handler SubmitTrainingTaskHandler
+	post /training/tasks (SubmitTrainingReq) returns (TrainingTaskResp)
+
+	@handler GetTrainingTaskHandler
+	get /training/tasks/:task_id (GetTrainingTaskReq) returns (TrainingTask)
+
+	// 任务列表
+	@handler ListTasksHandler
+	get /tasks/list (ListTasksReq) returns (ListTasksResp)
+
+	// 回调任务状态
+	@handler CallBackTaskStatusHandler
+	post /tasks/callback (CallBackTaskStatusReq) returns (CommonResp)
+}
+
+@server (
+	prefix: "/api/v1/jobs"
+	group:  health
+)
+service job_scheduler {
+	@handler HealthHandler
+	get /health returns (CommonResp)
+
+	@handler ReadyHandler
+	get /ready returns (CommonResp)
+
+	@handler MetricsHandler
+	get /metrics returns (CommonResp)
+}
+

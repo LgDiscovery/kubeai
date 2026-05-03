@@ -39,7 +39,7 @@ type InferenceServiceReconciler struct {
 //+kubebuilder:rbac:groups=ai.kubeai.io,resources=inferenceservices,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=ai.kubeai.io,resources=inferenceservices/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=ai.kubeai.io,resources=inferenceservices/finalizers,verbs=update
-//+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=apps,resources=deploy,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=autoscaling,resources=horizontalpodautoscalers,verbs=get;list;watch;create;update;patch;delete

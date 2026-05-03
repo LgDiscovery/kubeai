@@ -11,4 +11,3 @@ COPY --from=Builder /bin/api-gateway /app/api-gateway
 COPY etc/gateway.yaml /app/etc/gateway.yaml
 EXPOSE 8080
 ENTRYPOINT ["/app/api-gateway", "-f", "/app/etc/gateway.yaml"]
-

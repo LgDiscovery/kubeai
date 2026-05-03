@@ -1,0 +1,224 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubeai-config
+  namespace: kubeai
+data:
+  inference-gateway.yaml: |
+    Name: inference-gateway
+    Host: 0.0.0.0
+    Port: 58082
+
+    Etcd:
+      Hosts:
+        - "etcd.kubeai.svc.cluster.local:2379"
+      Key: "kubeai.services.inference-gateway"
+
+    Redis:
+      RedisConf:
+        Host: "redis-redis-cluster-0.redis-redis-cluster-headless.kubeai.svc.cluster.local:6379,redis-redis-cluster-1.redis-redis-cluster-headless.kubeai.svc.cluster.local:6379,redis-redis-cluster-2.redis-redis-cluster-headless.kubeai.svc.cluster.local:6379"
+        Type: cluster
+        Tls: false
+        NonBlock: true
+        PingTimeout: 1s
+      Streams:
+        Inference: "kubeai:inference:task"
+        Training: "kubeai:training:task"
+        DeadLetter: "kubeai:deadLetter:task"
+      ConsumerGroup: "inference-gateway"
+      MaxRetries: 3
+      Expiration: 24h
+      RetryBackoff: 1000
+
+    Database:
+      Host: "postgres.kubeai.svc.cluster.local"
+      Port: 5432
+      DBName: "kubeai_platform"
+      SSLMode: "disable"
+      MaxIdleConns: 10
+      MaxOpenConns: 100
+
+    ModelManager:
+      URL: "http://model-manager.kubeai.svc.cluster.local:58080"
+      Timeout: 5s
+
+    JobSchedule:
+      URL: "http://job-scheduler.kubeai.svc.cluster.local:58081"
+      Timeout: 5s
+
+    K8s:
+      Namespace: "kubeai"
+      InferenceJobImage: "tensorflow/serving:2.15.0"
+      TrainingJobImage: "kubeflow/training-operator:v1"
+
+    Scheduler:
+      Algorithm: "binpack"
+      EnableGPUPacking: true
+      GPUBinpackWeight: 0.7
+
+    ResourceSync:
+      Interval: 10s
+
+    Log:
+      ServiceName: kubeai-inference-gateway
+      Mode: console
+      Level: info
+      Encoding: json
+      TimeFormat: "2006-01-02T15:04:05.000Z07:00"
+
+    Metrics:
+      Enabled: true
+      Path: "/metrics"
+
+  model-manager.yaml: |
+    Name: model-manager
+    Host: 0.0.0.0
+    Port: 58080
+
+    Etcd:
+      Hosts:
+        - "etcd.kubeai.svc.cluster.local:2379"
+      Key: "kubeai.services.model-manager"
+
+    Database:
+      Host: "postgres.kubeai.svc.cluster.local"
+      Port: 5432
+      DBName: "kubeai_platform"
+      SSLMode: "disable"
+      MaxIdleConns: 10
+      MaxOpenConns: 100
+
+    MinIO:
+      Endpoint: "minio.kubeai.svc.cluster.local:9000"
+      Bucket: "models"
+      UseSSL: false
+
+    Log:
+      ServiceName: kubeai-model-manager
+      Mode: console
+      Level: info
+      Encoding: json
+      TimeFormat: "2006-01-02T15:04:05.000Z07:00"
+
+    Metrics:
+      Enabled: true
+      Path: "/api/v1/models/metrics"
+
+  job-scheduler.yaml: |
+    Name: job-scheduler
+    Host: 0.0.0.0
+    Port: 58081
+
+    Etcd:
+      Hosts:
+        - "etcd.kubeai.svc.cluster.local:2379"
+      Key: "kubeai.services.job-scheduler"
+
+    Redis:
+      RedisConf:
+        Host: "redis-redis-cluster-0.redis-redis-cluster-headless.kubeai.svc.cluster.local:6379,redis-redis-cluster-1.redis-redis-cluster-headless.kubeai.svc.cluster.local:6379,redis-redis-cluster-2.redis-redis-cluster-headless.kubeai.svc.cluster.local:6379"
+        Type: cluster
+        Tls: false
+        NonBlock: true
+        PingTimeout: 1s
+      Streams:
+        Inference: "kubeai:inference:task"
+        Training: "kubeai:training:task"
+        DeadLetter: "kubeai:deadLetter:task"
+      ConsumerGroup: "inference-gateway"
+      MaxRetries: 3
+      Expiration: 24h
+      RetryBackoff: 1000
+
+    Database:
+      Host: "postgres.kubeai.svc.cluster.local"
+      Port: 5432
+      DBName: "kubeai_platform"
+      SSLMode: "disable"
+      MaxIdleConns: 10
+      MaxOpenConns: 100
+
+    ModelManager:
+      URL: "http://model-manager.kubeai.svc.cluster.local:58080"
+      Timeout: 5s
+
+    K8s:
+      Namespace: "kubeai"
+      InferenceJobImage: "tensorflow/serving:2.15.0"
+      TrainingJobImage: "kubeflow/training-operator:v1"
+
+    ResourceSync:
+      Interval: 10s
+
+    Log:
+      ServiceName: kubeai-job-scheduler
+      Mode: console
+      Level: info
+      Encoding: json
+      TimeFormat: "2006-01-02T15:04:05.000Z07:00"
+
+    Metrics:
+      Enabled: true
+      Path: "/metrics"
+
+  api-gateway.yaml: |
+    Name: api-gateway
+    Host: 0.0.0.0
+    Port: 8080
+    Mode: dev
+
+    Etcd:
+      Hosts:
+        - "etcd.kubeai.svc.cluster.local:2379"
+      Key: "kubeai.gateway.config"
+      InsecureSkipVerify: false
+      DialTimeout: 15s
+
+    Discovery:
+      ModelManagerKey: "kubeai.services.model-manager"
+      TaskSchedulerKey: "kubeai.services.job-scheduler"
+      InferenceGatewayKey: "kubeai.services.inference-gateway"
+
+    Database:
+      Host: "postgres.kubeai.svc.cluster.local"
+      Port: 5432
+      DBName: "kubeai_platform"
+      SSLMode: "disable"
+      MaxIdleConns: 10
+      MaxOpenConns: 100
+
+    Log:
+      ServiceName: kubeai-api-gateway
+      Mode: console
+      Level: info
+      Encoding: json
+      TimeFormat: "2006-01-02T15:04:05.000Z07:00"
+
+    Auth:
+      AccessSecret: kubeai-platform-2024-secret
+      AccessExpire: 604800
+
+    Redis:
+      Host: "redis-redis-cluster-0.redis-redis-cluster-headless.kubeai.svc.cluster.local:6379,redis-redis-cluster-1.redis-redis-cluster-headless.kubeai.svc.cluster.local:6379,redis-redis-cluster-2.redis-redis-cluster-headless.kubeai.svc.cluster.local:6379"
+      Type: cluster
+      Tls: false
+      NonBlock: true
+      PingTimeout: 5s
+
+    RateLimit:
+      Enabled: true
+      Rate: 100
+      Interval: 60
+      KeyPrefix: "kubeai:gateway:ratelimit:"
+
+    Upstreams:
+      ModelManager:
+        URL: http://model-manager.kubeai.svc.cluster.local:58080
+      JobScheduler:
+        URL: http://job-scheduler.kubeai.svc.cluster.local:58081
+      InferenceGateway:
+        URL: http://inference-gateway.kubeai.svc.cluster.local:58082
+
+    Metrics:
+      Enabled: true
+      Path: /api/v1/metrics

@@ -1,0 +1,90 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: etcd
+  namespace: kubeai
+  labels:
+    app: etcd
+spec:
+  clusterIP: None
+  ports:
+    - name: client
+      port: 2379
+      targetPort: 2379
+    - name: peer
+      port: 2380
+      targetPort: 2380
+  selector:
+    app: etcd
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: etcd
+  namespace: kubeai
+spec:
+  serviceName: etcd
+  replicas: 1
+  selector:
+    matchLabels:
+      app: etcd
+  template:
+    metadata:
+      labels:
+        app: etcd
+    spec:
+      containers:
+        - name: etcd
+          image: bitnami/etcd:3.5.11
+          ports:
+            - containerPort: 2379
+              name: client
+            - containerPort: 2380
+              name: peer
+          env:
+            - name: ETCD_NAME
+              value: etcd-0
+            - name: ETCD_INITIAL_ADVERTISE_PEER_URLS
+              value: http://etcd-0.etcd.kubeai.svc.cluster.local:2380
+            - name: ETCD_LISTEN_PEER_URLS
+              value: http://0.0.0.0:2380
+            - name: ETCD_LISTEN_CLIENT_URLS
+              value: http://0.0.0.0:2379
+            - name: ETCD_ADVERTISE_CLIENT_URLS
+              value: http://etcd.kubeai.svc.cluster.local:2379
+            - name: ETCD_INITIAL_CLUSTER
+              value: etcd-0=http://etcd-0.etcd.kubeai.svc.cluster.local:2380
+            - name: ETCD_INITIAL_CLUSTER_STATE
+              value: new
+            - name: ALLOW_NONE_AUTHENTICATION
+              value: "yes"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 2379
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 2379
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - name: etcd-data
+              mountPath: /bitnami/etcd
+  volumeClaimTemplates:
+    - metadata:
+        name: etcd-data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 10Gi

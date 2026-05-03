@@ -19,6 +19,11 @@ func RegisterHandlers(server *rest.Server, serverCtx *svc.ServiceContext) {
 			[]rest.Middleware{serverCtx.CorsMiddleware, serverCtx.MetricsMiddleware},
 			[]rest.Route{
 				{
+					Method:  http.MethodGet,
+					Path:    "/health",
+					Handler: auth.HealthHandler(serverCtx),
+				},
+				{
 					Method:  http.MethodPost,
 					Path:    "/login",
 					Handler: auth.LoginHandler(serverCtx),
