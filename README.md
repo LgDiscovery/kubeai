@@ -47,10 +47,13 @@
 * 可观测：Prometheus、Grafana、ELK
 * 部署：Docker、K8s、kubeadm
 
-
 ## 4、快速开始（一键部署）
 
 ```
+# 克隆代码仓库
+git clone https://github.com/LgDiscovery/kubeai.git
+cd kubeai
+
 # 全量部署（命名空间 + 配置 + 中间件 + 服务）
 make full-deploy
 
