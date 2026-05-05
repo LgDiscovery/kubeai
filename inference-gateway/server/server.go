@@ -20,7 +20,7 @@ import (
 	"time"
 )
 
-var configFile = flag.String("f", "etc/inference-gateway-service.yaml", "the config file")
+var configFile = flag.String("f", "etc/inference-gateway.yaml", "the config file")
 
 func Start() {
 	flag.Parse()

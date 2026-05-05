@@ -5,7 +5,6 @@ package inference
 
 import (
 	"context"
-	"fmt"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	aiv1 "kubeai-inference-gateway/trainingjob/api/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -31,7 +30,7 @@ func NewResumeTrainingLogic(ctx context.Context, svcCtx *svc.ServiceContext) *Re
 }
 
 func (l *ResumeTrainingLogic) ResumeTraining(req *types.ControlReq) (resp *types.CommonResp, err error) {
-	jobName := fmt.Sprintf("train-%s", req.TaskID)
+	jobName := req.TaskID
 	job := &aiv1.TrainingJob{}
 	if err := l.svcCtx.CtrlClient.Get(l.ctx, k8sTypes.NamespacedName{Name: jobName, Namespace: l.svcCtx.Config.K8s.Namespace}, job); err != nil {
 		return nil, err

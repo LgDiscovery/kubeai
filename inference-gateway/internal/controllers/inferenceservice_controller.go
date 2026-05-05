@@ -25,7 +25,13 @@ import (
 	aiv1 "kubeai-inference-gateway/inferenceservice/api/v1"
 )
 
-const InferenceServiceFinalizer = "ai.kubeai.io/finalizer"
+const (
+	StatePending              = "Pending"
+	StateRunning              = "Running"
+	StateFailed               = "Failed"
+	StateSucceeded            = "Succeeded"
+	InferenceServiceFinalizer = "ai.kubeai.io/finalizer"
+)
 
 type InferenceServiceReconciler struct {
 	client.Client
@@ -36,9 +42,9 @@ type InferenceServiceReconciler struct {
 	JobScheduleClient *modelClient.JobScheduleClient  //客户端实例
 }
 
-//+kubebuilder:rbac:groups=ai.kubeai.io,resources=inferenceservices,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=ai.kubeai.io,resources=inferenceservices/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=ai.kubeai.io,resources=inferenceservices/finalizers,verbs=update
+//+kubebuilder:rbac:groups=inference.kubeai.platform.io,resources=inferenceservices,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=inference.kubeai.platform.io,resources=inferenceservices/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=inference.kubeai.platform.io,resources=inferenceservices/finalizers,verbs=update
 //+kubebuilder:rbac:groups=apps,resources=deploy,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
@@ -73,8 +79,14 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		if help.ContainsString(isvc.Finalizers, InferenceServiceFinalizer) {
 			log.Info("start cleaning up InferenceService resources")
 			// 删除时清理所有关联资源，避免残留
-			_ = r.cleanupCanaryResources(ctx, isvc)
-			_ = r.cleanupStableResources(ctx, isvc)
+			if err := r.cleanupCanaryResources(ctx, isvc); err != nil {
+				log.Error(err, "Failed to cleanup canary resources")
+				return ctrl.Result{}, err
+			}
+			if err := r.cleanupStableResources(ctx, isvc); err != nil {
+				log.Error(err, "Failed to cleanup stable resources")
+				return ctrl.Result{}, err
+			}
 			isvc.Finalizers = help.RemoveString(isvc.Finalizers, InferenceServiceFinalizer)
 			if err := r.Update(ctx, isvc); err != nil {
 				log.Error(err, "Failed to remove finalizer from InferenceService")
@@ -174,18 +186,20 @@ func (r *InferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	if err := r.reconcileHPA(ctx, isvc, hpa); err != nil {
 		log.Error(err, "Failed to reconcile HPA")
 		return ctrl.Result{}, err
-	} else {
-		// 如果没有配置 Autoscaling，删除已存在的 HPA
+	}
+	// 无 Autoscaling 配置时删除 HPA
+	if isvc.Spec.Autoscaling == nil {
 		existingHPA := &autoscalingv2.HorizontalPodAutoscaler{}
 		err := r.Get(ctx, types.NamespacedName{Name: isvc.Name, Namespace: isvc.Namespace}, existingHPA)
 		if err == nil {
-			log.Info("Deleting existing HPA as Autoscaling is not configured")
+			log.Info("Deleting HPA (autoscaling disabled)")
 			if err := r.Delete(ctx, existingHPA); err != nil {
 				return ctrl.Result{}, err
 			}
+		} else if !errors.IsNotFound(err) {
+			return ctrl.Result{}, err
 		}
 	}
-
 	isvc.Status.Ready = true
 	isvc.Status.URL = fmt.Sprintf("http://%s.%s.svc.cluster.local", isvc.Name, isvc.Namespace)
 
@@ -217,7 +231,7 @@ func (r *InferenceServiceReconciler) reconcileDeployment(ctx context.Context, is
 		return err
 	} else {
 		// 更新逻辑：这里简化处理，实际中可能需要更精细的 Patch 策略 深度比较以避免不必要的更新
-		if equality.Semantic.DeepEqual(found.Spec.Template.Spec, desired.Spec.Template.Spec) ||
+		if equality.Semantic.DeepEqual(found.Spec.Template.Spec, desired.Spec.Template.Spec) &&
 			equality.Semantic.DeepEqual(found.Spec.Replicas, desired.Spec.Replicas) {
 			log.Info("No changes detected in Deployment", "Deployment.Namespace", found.Namespace, "Deployment.Name", found.Name)
 			return nil
@@ -249,9 +263,10 @@ func (r *InferenceServiceReconciler) reconcileService(ctx context.Context, isvc 
 	} else if err != nil {
 		return err
 	} else {
-		if equality.Semantic.DeepEqual(found.Spec.Selector, desired.Spec.Selector) ||
-			equality.Semantic.DeepEqual(found.Spec.Ports, desired.Spec.Ports) ||
-			equality.Semantic.DeepEqual(found.ObjectMeta.Annotations, desired.ObjectMeta.Annotations) {
+		if equality.Semantic.DeepEqual(found.Spec.Selector, desired.Spec.Selector) &&
+			equality.Semantic.DeepEqual(found.Spec.Ports, desired.Spec.Ports) &&
+			equality.Semantic.DeepEqual(found.ObjectMeta.Annotations, desired.ObjectMeta.Annotations) &&
+			equality.Semantic.DeepEqual(found.Spec.Type, desired.Spec.Type) {
 			log.Info("No changes detected in Service Selector", "Service.Namespace", found.Namespace, "Service.Name", found.Name)
 			return nil
 		}
@@ -283,6 +298,13 @@ func (r *InferenceServiceReconciler) reconcileIngress(ctx context.Context, isvc 
 	} else if err != nil {
 		return err
 	} else {
+		// 对比关键字段，无变化则跳过更新
+		if equality.Semantic.DeepEqual(found.Spec.Rules, desired.Spec.Rules) &&
+			equality.Semantic.DeepEqual(found.ObjectMeta.Annotations, desired.ObjectMeta.Annotations) &&
+			equality.Semantic.DeepEqual(found.Spec.IngressClassName, desired.Spec.IngressClassName) {
+			log.Info("No changes in Ingress")
+			return nil
+		}
 		log.Info("Updating Ingress", "Ingress.Namespace", found.Namespace, "Ingress.Name", found.Name)
 		desired.ResourceVersion = found.ResourceVersion
 		if err := r.Update(ctx, desired); err != nil {
@@ -296,7 +318,15 @@ func (r *InferenceServiceReconciler) reconcileIngress(ctx context.Context, isvc 
 func (r *InferenceServiceReconciler) reconcileHPA(ctx context.Context, isvc *aiv1.InferenceService, desired *autoscalingv2.HorizontalPodAutoscaler) error {
 	log := log.FromContext(ctx)
 	if desired == nil {
-		return nil
+		// 删除已存在的 HPA
+		existingHPA := &autoscalingv2.HorizontalPodAutoscaler{}
+		err := r.Get(ctx, types.NamespacedName{Name: isvc.Name, Namespace: isvc.Namespace}, existingHPA)
+		if err == nil {
+			return r.Delete(ctx, existingHPA)
+		} else if errors.IsNotFound(err) {
+			return nil
+		}
+		return err
 	}
 
 	found := &autoscalingv2.HorizontalPodAutoscaler{}
@@ -337,9 +367,20 @@ func (r *InferenceServiceReconciler) updateStatus(ctx context.Context, isvc *aiv
 	}
 
 	// 更新 Status 字段
+	isvc.Status.StableState = getDeploymentState(deploy)
 	isvc.Status.URL = url
 	isvc.Status.ReadyReplicas = deploy.Status.ReadyReplicas
 	isvc.Status.Ready = deploy.Status.ReadyReplicas > 0
+
+	// 获取 Canary Deployment 状态（启用时）
+	if isvc.Spec.Canary != nil && isvc.Spec.Canary.Enabled {
+		canaryDeploy := &appsv1.Deployment{}
+		if err := r.Get(ctx, types.NamespacedName{Name: isvc.Name + "-canary", Namespace: isvc.Namespace}, canaryDeploy); err == nil {
+			isvc.Status.CanaryState = getDeploymentState(canaryDeploy)
+		} else if !errors.IsNotFound(err) {
+			return err
+		}
+	}
 
 	// 设置条件
 	isvc.Status.Conditions = []metav1.Condition{
@@ -354,6 +395,19 @@ func (r *InferenceServiceReconciler) updateStatus(ctx context.Context, isvc *aiv
 
 	log.Info("Updating InferenceService Status", "URL", url, "ReadyReplicas", deploy.Status.ReadyReplicas)
 	return r.Status().Update(ctx, isvc)
+}
+
+func getDeploymentState(deploy *appsv1.Deployment) string {
+	for _, cond := range deploy.Status.Conditions {
+		if cond.Type == appsv1.DeploymentAvailable {
+			if cond.Status == corev1.ConditionTrue {
+				return StateRunning
+			} else if cond.Status == corev1.ConditionFalse {
+				return StateFailed
+			}
+		}
+	}
+	return StatePending
 }
 
 // SetupWithManager sets up the controller with the Manager.

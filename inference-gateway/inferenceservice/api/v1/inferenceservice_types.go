@@ -24,81 +24,183 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// +kubebuilder:validation:XValidation:rule="self.replicas == null || self.replicas >=0",message="replicas must >=0"
-// +kubebuilder:validation:XValidation:rule="self.modelName != ”",message="modelName required"
 // InferenceServiceSpec defines the desired state of InferenceService
 type InferenceServiceSpec struct {
 	// 模型信息
-	ModelName    string `json:"modelName"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	ModelName string `json:"modelName"`
+
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
 	ModelVersion string `json:"modelVersion"`
 
 	// 镜像信息(如果模型是自定义镜像,否则用默认推理镜像+模型挂载)
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*(:[a-zA-Z0-9._-]+)?|([a-zA-Z0-9-]+\/)?[a-zA-Z0-9._-]+(:[a-zA-Z0-9._-]+)?|@sha256:[0-9a-f]{64})$`
 	Image string `json:"image,omitempty"`
+
 	// 容器端口 (默认 8501)
-	Port int32 `json:"port,omitempty"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	// +kubebuilder:default=8501
+	Port int32 `json:"port"`
+
 	// 副本数（可被HPA覆盖）
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum=1
 	Replicas *int32 `json:"replicas,omitempty"`
+
 	// 节点名称（可被HPA覆盖）
+	// +kubebuilder:validation:Optional
 	NodeName string `json:"nodeName,omitempty"`
 
-	//资源限制
-	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+	// 资源限制
+	// +kubebuilder:validation:Required
+	Resources corev1.ResourceRequirements `json:"resources"`
 
 	// 自动扩缩容配置
+	// +kubebuilder:validation:Optional
 	Autoscaling *AutoscalingSpec `json:"autoscaling,omitempty"`
 
 	// 灰度发布配置
+	// +kubebuilder:validation:Optional
 	Canary *CanarySpec `json:"canary,omitempty"`
 
 	// 服务暴露
-	Service        *ServiceSpec `json:"service,omitempty"`
-	ModelPath      string       `json:"modelPath,omitempty"`
-	ActiveDeadline int64        `json:"activeDeadline,omitempty"`
+	// +kubebuilder:validation:Required
+	Service *ServiceSpec `json:"service"`
+
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Pattern=`^\/?[a-zA-Z0-9_\-\/]+$`
+	ModelPath string `json:"modelPath,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum=0
+	ActiveDeadline int64 `json:"activeDeadline,omitempty"`
 }
 
+// AutoscalingSpec 自动扩缩容配置
 type AutoscalingSpec struct {
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum=1
 	MinReplicas *int32 `json:"minReplicas,omitempty"`
-	MaxReplicas int32  `json:"maxReplicas"`
+
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum=1
+	MaxReplicas int32 `json:"maxReplicas,omitempty"`
+
 	// 目标 CPU 使用率 (0-100)
-	TargetCPUUtilization *int32 `json:"targetCPUUtilization,omitempty"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=100
+	TargetCPUUtilization *int32 `json:"targetCPUUtilization"`
+
 	// 目标内存使用率 (0-100)
-	TargetMemoryUtilization *int32 `json:"targetMemoryUtilization,omitempty"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=100
+	TargetMemoryUtilization *int32 `json:"targetMemoryUtilization"`
 }
 
+// CanarySpec 灰度发布配置
 type CanarySpec struct {
-	Enabled      bool                         `json:"enabled"`
-	Version      string                       `json:"version"`      // 灰度版本号
-	Weight       int32                        `json:"weight"`       // 流量比例 0-100
-	ModelName    string                       `json:"modelName"`    // 灰度模型名（通常与主模型相同）
-	ModelVersion string                       `json:"modelVersion"` // 灰度模型版本
-	Image        string                       `json:"image,omitempty"`
-	Resources    *corev1.ResourceRequirements `json:"resources,omitempty"`
+	// +kubebuilder:validation:Required
+	Enabled bool `json:"enabled"`
+
+	// 灰度版本号
+	// +kubebuilder:validation:RequiredIf=Enabled=true
+	// +kubebuilder:validation:MinLength=1
+	Version string `json:"version"`
+
+	// 流量比例 0-100
+	// +kubebuilder:validation:RequiredIf=Enabled=true
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=100
+	Weight int32 `json:"weight"`
+
+	// 灰度模型名（通常与主模型相同）
+	// +kubebuilder:validation:RequiredIf=Enabled=true
+	// +kubebuilder:validation:MinLength=1
+	ModelName string `json:"modelName"`
+
+	// 灰度模型版本
+	// +kubebuilder:validation:RequiredIf=Enabled=true
+	// +kubebuilder:validation:MinLength=1
+	ModelVersion string `json:"modelVersion"`
+
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*(:[a-zA-Z0-9._-]+)?|([a-zA-Z0-9-]+\/)?[a-zA-Z0-9._-]+(:[a-zA-Z0-9._-]+)?|@sha256:[0-9a-f]{64})$`
+	Image string `json:"image,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	Resources *corev1.ResourceRequirements `json:"resources"`
 }
 
 // ServiceSpec 服务暴露配置
 type ServiceSpec struct {
 	// ClusterIp, NodePort, LoadBalancer
-	Type corev1.ServiceType `json:"type,omitempty"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Enum=ClusterIP;NodePort;LoadBalancer
+	Type corev1.ServiceType `json:"type"`
+
 	// Ingress 域名 (如果不填，则不创建 Ingress)
-	Host        string            `json:"host,omitempty"`
-	Port        int32             `json:"port"`                  // 服务端口
-	TargetPort  int32             `json:"targetPort"`            //容器端口
-	Annotations map[string]string `json:"annotations,omitempty"` // 可用于Ingress配置
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$`
+	Host string `json:"host,omitempty"`
+
+	// 服务端口
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	Port int32 `json:"port"`
+
+	// 容器端口
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	TargetPort int32 `json:"targetPort"`
+
+	// 可用于Ingress配置
+	// +kubebuilder:validation:Optional
+	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
 // InferenceServiceStatus defines the observed state of InferenceService.
 type InferenceServiceStatus struct {
 	// 稳定版本部署状态
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Enum=Pending;Running;Failed;Succeeded
 	StableState string `json:"stableState,omitempty"`
-	//灰度版本部署状态(如有)
-	CanaryState   string             `json:"canaryState,omitempty"`
-	Conditions    []metav1.Condition `json:"conditions,omitempty"`
-	URL           string             `json:"url,omitempty"`           // 服务访问地址
-	ReadyReplicas int32              `json:"readyReplicas,omitempty"` // 当前副本数
-	Ready         bool               `json:"ready"`                   // 服务是否就绪
-	//最后更新时间
-	LastUpdateTime  metav1.Time `json:"lastUpdateTime,omitempty"`
-	RegisteredModel string      `json:"registeredModel,omitempty"`
+
+	// 灰度版本部署状态(如有)
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Enum=Pending;Running;Failed;Succeeded
+	CanaryState string `json:"canaryState,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// 服务访问地址
+	// +kubebuilder:validation:Optional
+	URL string `json:"url,omitempty"`
+
+	// 当前副本数
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum=0
+	ReadyReplicas int32 `json:"readyReplicas,omitempty"`
+
+	// 服务是否就绪
+	// +kubebuilder:validation:Optional
+	Ready bool `json:"ready,omitempty"`
+
+	// 最后更新时间
+	// +kubebuilder:validation:Optional
+	LastUpdateTime metav1.Time `json:"lastUpdateTime,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	RegisteredModel string `json:"registeredModel,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -107,6 +209,8 @@ type InferenceServiceStatus struct {
 // +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".spec.modelVersion"
 // +kubebuilder:printcolumn:name="Ready",type="boolean",JSONPath=".status.ready"
 // +kubebuilder:resource:shortName=isvc
+// +kubebuilder:validation:XValidation:rule="!has(self.spec.autoscaling) || (self.spec.autoscaling.minReplicas == nil || self.spec.autoscaling.maxReplicas >= self.spec.autoscaling.minReplicas)",message="maxReplicas must be greater than or equal to minReplicas in autoscaling"
+// +kubebuilder:validation:XValidation:rule="!has(self.spec.canary) || !self.spec.canary.enabled || (self.spec.canary.weight >=0 && self.spec.canary.weight <=100)",message="canary weight must be between 0 and 100 when canary is enabled"
 // InferenceService is the Schema for the inferenceservices API
 type InferenceService struct {
 	metav1.TypeMeta `json:",inline"`
@@ -116,6 +220,7 @@ type InferenceService struct {
 	metav1.ObjectMeta `json:"metadata,omitzero"`
 
 	// spec defines the desired state of InferenceService
+	// +kubebuilder:validation:Required
 	Spec InferenceServiceSpec `json:"spec,omitempty"`
 
 	// status defines the observed state of InferenceService

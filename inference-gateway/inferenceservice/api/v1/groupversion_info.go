@@ -14,9 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package v1 contains API Schema definitions for the inference v1 API group.
+// Package v1 contains API Schema definitions for the kubeai v1 API group.
 // +kubebuilder:object:generate=true
-// +groupName=inference.kubeai.platform.io
+// +groupName=kubeai.platform.io
 package v1
 
 import (
@@ -27,7 +27,7 @@ import (
 var (
 	// SchemeGroupVersion is group version used to register these objects.
 	// This name is used by applyconfiguration generators (e.g. controller-gen).
-	SchemeGroupVersion = schema.GroupVersion{Group: "inference.kubeai.platform.io", Version: "v1"}
+	SchemeGroupVersion = schema.GroupVersion{Group: "kubeai.platform.io", Version: "v1"}
 
 	// GroupVersion is an alias for SchemeGroupVersion, for backward compatibility.
 	GroupVersion = SchemeGroupVersion

@@ -5,7 +5,6 @@ package inference
 
 import (
 	"context"
-	"fmt"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	aiv1 "kubeai-inference-gateway/trainingjob/api/v1"
 
@@ -30,7 +29,7 @@ func NewCancelTrainingLogic(ctx context.Context, svcCtx *svc.ServiceContext) *Ca
 }
 
 func (l *CancelTrainingLogic) CancelTraining(req *types.ControlReq) (resp *types.CommonResp, err error) {
-	jobName := fmt.Sprintf("train-%s", req.TaskID)
+	jobName := req.TaskID
 	job := &aiv1.TrainingJob{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jobName,

@@ -15,6 +15,7 @@ spec:
       labels:
         app: inference-gateway
     spec:
+      serviceAccountName: inferenceservice-controller-sa
       containers:
         - name: inference-gateway
           image: docker.io/lg-discovery/kubeai-inference-gateway:v1.0.0 # 需替换为真实的 inference-gateway 镜像
@@ -85,3 +86,54 @@ spec:
     - port: 58082
       targetPort: 58082
   type: ClusterIP
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: inferenceservice-controller-sa
+  namespace: kubeai
+  labels:
+    app: inference-gateway
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: inferenceservice-controller-role
+rules:
+   # 自定义资源：InferenceService & TrainingJob
+  - apiGroups: ["kubeai.platform.io"]
+    resources: ["inferenceservices","trainingjobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # 自定义资源：Status 子资源
+  - apiGroups: ["kubeai.platform.io"]
+    resources: ["inferenceservices/status","trainingjobs/status"]
+    verbs: ["get", "update", "patch"]
+  # 自定义资源：Finalizers 子资源
+  - apiGroups: ["kubeai.platform.io"]
+    resources: ["inferenceservices/finalizers","trainingjobs/finalizers"]
+    verbs: ["update"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["core"]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: inferenceservice-controller-binding
+subjects:
+  - kind: ServiceAccount
+    name: inferenceservice-controller-sa  # 服务运行的 ServiceAccount
+    namespace: kubeai
+roleRef:
+  kind: ClusterRole
+  name: inferenceservice-controller-role
+  apiGroup: rbac.authorization.k8s.io

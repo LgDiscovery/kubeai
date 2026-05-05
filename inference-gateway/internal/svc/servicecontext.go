@@ -26,6 +26,7 @@ import (
 	tiv1 "kubeai-inference-gateway/trainingjob/api/v1"
 	"log"
 	"os"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -124,6 +125,12 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	// controller-runtime manager (用于 Operator)
 	mgr, err := manager.New(k8sConfig, manager.Options{
 		Scheme: scheme,
+		Cache: cache.Options{
+			DefaultNamespaces: map[string]cache.Config{
+				// 限制监听指定 Namespace（提升性能）
+				c.K8s.Namespace: {},
+			},
+		},
 		// 关闭 controller-runtime 自带 metrics
 		Metrics: metricsserver.Options{
 			BindAddress: "0",

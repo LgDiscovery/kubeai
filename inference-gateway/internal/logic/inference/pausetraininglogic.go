@@ -5,7 +5,6 @@ package inference
 
 import (
 	"context"
-	"fmt"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"kubeai-inference-gateway/internal/svc"
 	"kubeai-inference-gateway/internal/types"
@@ -30,7 +29,7 @@ func NewPauseTrainingLogic(ctx context.Context, svcCtx *svc.ServiceContext) *Pau
 }
 
 func (l *PauseTrainingLogic) PauseTraining(req *types.ControlReq) (resp *types.CommonResp, err error) {
-	jobName := fmt.Sprintf("train-%s", req.TaskID)
+	jobName := req.TaskID
 	job := &aiv1.TrainingJob{}
 	if err := l.svcCtx.CtrlClient.Get(l.ctx, k8sTypes.NamespacedName{Name: jobName, Namespace: l.svcCtx.Config.K8s.Namespace}, job); err != nil {
 		return nil, err

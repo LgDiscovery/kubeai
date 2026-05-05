@@ -9,6 +9,10 @@ SED ?= sed
 ENV ?= prod
 DEPLOY_DIR ?= ./deploy
 
+# 新增：控制器配置目录路径
+INFERENCE_CONFIG := $(DEPLOY_DIR)/inferenceService/config
+TRAINING_CONFIG := $(DEPLOY_DIR)/trainingJob/config
+
 # 组件列表
 COMPONENTS = etcd postgres redis minio prometheus loki
 SERVICES = api-gateway model-manager job-scheduler inference-gateway
@@ -24,13 +28,42 @@ help: ## 显示帮助信息
 create-namespace: ## 创建kubeai命名空间
 	$(KUBECTL) create namespace $(NAMESPACE) --dry-run=client -o yaml | $(KUBECTL) apply -f -
 
-install-crd: create-namespace  ## 安装自定义资源 CRD
-	@echo "📜 安装自定义资源 CRD..."
+# install-crd 已集成控制器的 CRD 定义 + RBAC + 部署
+install-crd: create-namespace  ## 安装CRD定义 + 控制器RBAC + 控制器部署
+	@echo "📜 安装核心 CRD 定义..."
 	$(KUBECTL) apply -f $(DEPLOY_DIR)/crds/
 
-uninstall-crd:  ## 卸载自定义资源 CRD
-	@echo "🗑️ 卸载 CRD..."
+	@echo "🔧 安装 InferenceService 控制器 RBAC 与部署..."
+	# 递归安装 rbac/ 和 manager/ 下的所有 yaml（自动忽略无关文件）
+	find $(INFERENCE_CONFIG)/rbac -type f -name '*.yaml' | xargs -I {} $(KUBECTL) apply -f {} -n $(NAMESPACE)
+	find $(INFERENCE_CONFIG)/manager -type f -name '*.yaml' | xargs -I {} $(KUBECTL) apply -f {} -n $(NAMESPACE)
+
+	@echo "🔧 安装 TrainingJob 控制器 RBAC 与部署..."
+	find $(TRAINING_CONFIG)/rbac -type f -name '*.yaml' | xargs -I {} $(KUBECTL) apply -f {} -n $(NAMESPACE)
+	find $(TRAINING_CONFIG)/manager -type f -name '*.yaml' | xargs -I {} $(KUBECTL) apply -f {} -n $(NAMESPACE)
+
+# uninstall-crd 同步卸载控制器资源（先删部署再删CRD，避免残留）
+uninstall-crd:  ## 卸载CRD定义 + 控制器部署 + RBAC
+	@echo "🗑️ 卸载控制器部署..."
+	find $(INFERENCE_CONFIG)/manager -type f -name '*.yaml' | xargs -I {} $(KUBECTL) delete -f {} -n $(NAMESPACE) --ignore-not-found
+	find $(TRAINING_CONFIG)/manager -type f -name '*.yaml' | xargs -I {} $(KUBECTL) delete -f {} -n $(NAMESPACE) --ignore-not-found
+
+	@echo "🗑️ 卸载控制器 RBAC 权限..."
+	find $(INFERENCE_CONFIG)/rbac -type f -name '*.yaml' | xargs -I {} $(KUBECTL) delete -f {} -n $(NAMESPACE) --ignore-not-found
+	find $(TRAINING_CONFIG)/rbac -type f -name '*.yaml' | xargs -I {} $(KUBECTL) delete -f {} -n $(NAMESPACE) --ignore-not-found
+
+	@echo "🗑️ 卸载核心 CRD 定义..."
 	$(KUBECTL) delete -f $(DEPLOY_DIR)/crds/ --ignore-not-found
+
+# 【可选扩展】：安装控制器的网络策略 + Prometheus 监控（按需开启）
+install-crd-optional: install-crd ## 安装CRD可选资源（网络策略 + 监控）
+	@echo "🔧 安装 InferenceService 网络策略与监控..."
+	find $(INFERENCE_CONFIG)/network-policy -type f -name '*.yaml' | xargs -I {} $(KUBECTL) apply -f {} -n $(NAMESPACE)
+	find $(INFERENCE_CONFIG)/prometheus -type f -name '*.yaml' | xargs -I {} $(KUBECTL) apply -f {} -n $(NAMESPACE)
+
+	@echo "🔧 安装 TrainingJob 网络策略与监控..."
+	find $(TRAINING_CONFIG)/network-policy -type f -name '*.yaml' | xargs -I {} $(KUBECTL) apply -f {} -n $(NAMESPACE)
+	find $(TRAINING_CONFIG)/prometheus -type f -name '*.yaml' | xargs -I {} $(KUBECTL) apply -f {} -n $(NAMESPACE)
 
 deploy-configs: create-namespace ## 部署ConfigMap + Secret
 	$(KUBECTL) apply -f $(DEPLOY_DIR)/secrets/ -n $(NAMESPACE)
@@ -73,7 +106,7 @@ deploy-loki: ## 部署Loki (Helm)
 	$(HELM) upgrade --install promtail grafana/promtail -n $(NAMESPACE) -f ./deploy/promtail-values.yaml --create-namespace
 
 ##@ 业务服务部署
-deploy-services: deploy-deps install-crd ## 部署所有业务服务
+deploy-services: deploy-deps install-crd ## 部署所有业务服务（已依赖install-crd，确保控制器先就绪）
 	@for service in $(SERVICES); do \
 		echo "部署$$service..."; \
 		$(KUBECTL) apply -f ./deploy/server/$$service.yaml -n $(NAMESPACE); \

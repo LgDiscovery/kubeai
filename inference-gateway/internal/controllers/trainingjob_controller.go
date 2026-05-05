@@ -50,7 +50,7 @@ const (
 	ConditionTypeModelRegistered = "ModelRegistered" // 模型是否注册成功
 	// TrainingJobFinalizer Finalizer 名称
 	TrainingJobFinalizer = "training.kubeai.platform.io/finalizer"
-	// 模型注册最大重试次数
+	// 新增模型注册最大重试次数常量，限制模型注册的重试上限
 	maxModelRegisterRetry = 10
 )
 
@@ -64,9 +64,9 @@ type TrainingJobReconciler struct {
 	JobScheduleClient *callbackClient.JobScheduleClient  //客户端实例
 }
 
-// +kubebuilder:rbac:groups=training.kubeai.platform.io,resources=trainingjobs,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=training.kubeai.platform.io,resources=trainingjobs/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=training.kubeai.platform.io,resources=trainingjobs/finalizers,verbs=update
+// +kubebuilder:rbac:groups=trainingjob.kubeai.platform.io,resources=trainingjobs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=trainingjob.kubeai.platform.io,resources=trainingjobs/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=trainingjob.kubeai.platform.io,resources=trainingjobs/finalizers,verbs=update
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=batch,resources=jobs/status,verbs=get
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch
@@ -88,28 +88,50 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if tj.ObjectMeta.DeletionTimestamp.IsZero() {
 		// 资源未被删除：添加 Finalizer
 		if !help.ContainsString(tj.ObjectMeta.Finalizers, TrainingJobFinalizer) {
-			tj.ObjectMeta.Finalizers = append(tj.ObjectMeta.Finalizers, TrainingJobFinalizer)
-			if err := r.Update(ctx, &tj); err != nil {
+			log.Info("Adding finalizer to TrainingJob", "finalizer", TrainingJobFinalizer, "name", tj.Name, "namespace", tj.Namespace)
+			// 深拷贝避免修改原对象，保证Update操作安全
+			tjToUpdate := tj.DeepCopy()
+			tjToUpdate.ObjectMeta.Finalizers = append(tjToUpdate.ObjectMeta.Finalizers, TrainingJobFinalizer)
+			if err := r.Update(ctx, tjToUpdate); err != nil {
 				log.Error(err, "Failed to add finalizer to TrainingJob")
 				return ctrl.Result{}, err
 			}
-			// Finalizer更新后，重新入队
+			// Finalizer更新后重新入队，确保后续逻辑基于最新状态执行
+			log.Info("Finalizer added successfully, requeue TrainingJob", "name", tj.Name, "namespace", tj.Namespace)
 			return ctrl.Result{Requeue: true}, nil
 		}
 	} else {
-		// 资源被删除：执行清理逻辑
+		// 资源被删除：执行清理逻辑（保证删除前的资源回收）
 		if help.ContainsString(tj.ObjectMeta.Finalizers, TrainingJobFinalizer) {
 			// 清理资源预留、回调业务侧任务删除
-			log.Info("start cleaning up TrainingJob resources")
-			tj.Status.Phase = "Cancelled"
-			go r.callbackTaskStatus(&tj)
-			tj.ObjectMeta.Finalizers = help.RemoveString(tj.ObjectMeta.Finalizers, TrainingJobFinalizer)
-			if err := r.Update(ctx, &tj); err != nil {
-				log.Error(err, "Failed to delete finalizer from TrainingJob")
+			log.Info("Start cleaning up TrainingJob resources on deletion", "name", tj.Name, "namespace", tj.Namespace)
+			// 步骤1：更新状态为Cancelled（单独更新Status，避免元数据和状态混合更新失败）
+			tjStatusToUpdate := tj.DeepCopy()
+			tjStatusToUpdate.Status.Phase = "Cancelled"
+			tjStatusToUpdate.Status.Reason = "ResourceDeletion"
+			tjStatusToUpdate.Status.Message = fmt.Sprintf("TrainingJob %s/%s is being cancelled and cleaned up", tj.Namespace, tj.Name)
+			tjStatusToUpdate.Status.LastTransitionTime = metav1.Now()
+			if err := r.Update(ctx, tjStatusToUpdate); err != nil {
+				log.Error(err, "Failed to update TrainingJob status to Cancelled during deletion", "name", tj.Name, "namespace", tj.Namespace)
 				return ctrl.Result{}, err
 			}
+			// 步骤2：异步回调业务侧（避免阻塞Finalizer移除）
+			go func() {
+				log.Info("Callback business side for cancelled TrainingJob", "name", tj.Name, "namespace", tj.Namespace)
+				r.callbackTaskStatus(tjStatusToUpdate)
+			}()
+
+			// 步骤3：移除Finalizer（完成清理后释放，允许K8s最终删除资源）
+			tjFinalizerToUpdate := tj.DeepCopy()
+			tjFinalizerToUpdate.ObjectMeta.Finalizers = help.RemoveString(tjFinalizerToUpdate.ObjectMeta.Finalizers, TrainingJobFinalizer)
+			if err := r.Update(ctx, tjFinalizerToUpdate); err != nil {
+				log.Error(err, "Failed to remove finalizer from TrainingJob during deletion", "name", tj.Name, "namespace", tj.Namespace)
+				return ctrl.Result{}, err
+			}
+			log.Info("Finalizer removed successfully after cleanup", "name", tj.Name, "namespace", tj.Namespace)
 		}
-		// 已删除完成，无需继续调和
+		// 清理完成，无需继续调和
+		log.Info("TrainingJob deletion cleanup completed", "name", tj.Name, "namespace", tj.Namespace)
 		return ctrl.Result{}, nil
 	}
 
@@ -124,6 +146,9 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				r.setCondition(&tj, ConditionTypeModelRegistered, metav1.ConditionFalse, "ModelRegisterFailed", fmt.Sprintf("Model register failed: %s", err), metav1.Now())
 				// 状态Patch
 				if err := r.Status().Patch(ctx, &tj, client.MergeFrom(originalTJ)); err != nil {
+					if errors.IsConflict(err) {
+						return ctrl.Result{Requeue: true}, nil
+					}
 					log.Error(err, "Failed to update model register retry status")
 					return ctrl.Result{}, err
 				}
@@ -138,6 +163,9 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			go r.callbackTaskStatus(&tj)
 			// 统一Patch状态
 			if err := r.Status().Patch(ctx, &tj, client.MergeFrom(originalTJ)); err != nil {
+				if errors.IsConflict(err) {
+					return ctrl.Result{Requeue: true}, nil
+				}
 				log.Error(err, "Failed to update model registered status")
 				return ctrl.Result{}, err
 			}
@@ -154,7 +182,13 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if runTime > float64(tj.Spec.ActiveDeadlineSeconds) {
 			log.Error(nil, "TrainingJob exceeded active deadline", "runTime", runTime, "deadline", tj.Spec.ActiveDeadlineSeconds)
 			r.updateStatus(ctx, &tj, "Failed", "JobTimeout", fmt.Sprintf("Job exceeded active deadline of %d seconds", tj.Spec.ActiveDeadlineSeconds))
-			_ = r.Status().Patch(ctx, &tj, client.MergeFrom(originalTJ))
+			if err := r.Status().Patch(ctx, &tj, client.MergeFrom(originalTJ)); err != nil {
+				if errors.IsConflict(err) {
+					return ctrl.Result{Requeue: true}, nil
+				}
+				log.Error(err, "Failed to update job timeout status")
+				return ctrl.Result{}, err
+			}
 			go r.callbackTaskStatus(&tj)
 			return ctrl.Result{}, nil
 		}
@@ -191,9 +225,13 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err := ctrl.SetControllerReference(&tj, job, r.Scheme); err != nil {
 		log.Error(err, "Failed to set controller reference")
 		r.updateStatus(ctx, &tj, "Failed", "OwnerRefSetFailed", err.Error())
-		_ = r.Status().Patch(ctx, &tj, client.MergeFrom(originalTJ))
-		go r.callbackTaskStatus(&tj)
-		return ctrl.Result{}, err
+		if err := r.Status().Patch(ctx, &tj, client.MergeFrom(originalTJ)); err != nil {
+			if errors.IsConflict(err) {
+				return ctrl.Result{Requeue: true}, nil
+			}
+			log.Error(err, "Failed to update owner ref status")
+			return ctrl.Result{}, err
+		}
 	}
 
 	// 7. 检查 Job 是否存在
@@ -206,7 +244,13 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			if err := r.Create(ctx, job); err != nil {
 				log.Error(err, "Failed to create Job")
 				r.updateStatus(ctx, &tj, "Failed", "JobCreateFailed", err.Error())
-				_ = r.Status().Patch(ctx, &tj, client.MergeFrom(originalTJ))
+				if err := r.Status().Patch(ctx, &tj, client.MergeFrom(originalTJ)); err != nil {
+					if errors.IsConflict(err) {
+						return ctrl.Result{Requeue: true}, nil
+					}
+					log.Error(err, "Failed to update job create failed status")
+					return ctrl.Result{}, err
+				}
 				go r.callbackTaskStatus(&tj)
 				return ctrl.Result{}, err
 			}
@@ -222,6 +266,9 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// 8. 同步分布式任务状态
 	if err := r.Status().Patch(ctx, &tj, client.MergeFrom(originalTJ)); err != nil {
+		if errors.IsConflict(err) {
+			return ctrl.Result{Requeue: true}, nil
+		}
 		log.Error(err, "Failed to patch TrainingJob status")
 		return ctrl.Result{}, err
 	}
@@ -704,6 +751,11 @@ func (r *TrainingJobReconciler) callbackTaskStatus(tj *aiv1.TrainingJob) {
 		logx.Infof("callback task status to business side, no callback url, task name: %s", tj.Name)
 		return
 	}
+	defer func() {
+		if rec := recover(); rec != nil {
+			logx.Errorf("Panic in callback for job %s: %v", tj.Name, rec)
+		}
+	}()
 
 	log := logx.WithContext(context.Background()).WithFields(
 		logx.Field("task_id", tj.Name),
