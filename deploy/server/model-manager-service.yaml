@@ -84,4 +84,5 @@ spec:
   ports:
     - port: 58080
       targetPort: 58080
+      protocol: TCP
   type: ClusterIP

@@ -74,4 +74,6 @@ spec:
   ports:
     - port: 8080
       targetPort: 8080
+      protocol: TCP
+      nodePort: 38080
   type: NodePort # 如需对外暴露，可改为 NodePort/LoadBalancer

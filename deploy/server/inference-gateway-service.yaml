@@ -85,6 +85,7 @@ spec:
   ports:
     - port: 58082
       targetPort: 58082
+      protocol: TCP
   type: ClusterIP
 ---
 apiVersion: v1
