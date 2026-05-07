@@ -16,7 +16,7 @@ import (
 
 var configFile = flag.String("f", "etc/model-manager-service.yaml", "the config file")
 
-func Server() {
+func Start() {
 	flag.Parse()
 
 	var c config.Config
