@@ -74,3 +74,18 @@ func (m *MinIOClient) GetPresignedURL(ctx context.Context, objectName string) (s
 	}
 	return presignedURL.String(), nil
 }
+
+// HealthCheck 检查 MinIO 连接是否正常
+func (m *MinIOClient) HealthCheck(ctx context.Context) error {
+	// 检查 bucket 是否存在（同时验证连接）
+	_, err := m.client.BucketExists(ctx, m.bucket)
+	if err != nil {
+		return fmt.Errorf("minio health check failed: %w", err)
+	}
+	return nil
+}
+
+// GetBucketName 获取 bucket 名称
+func (m *MinIOClient) GetBucketName() string {
+	return m.bucket
+}

@@ -1,14 +1,11 @@
-// Code scaffolded by goctl. Safe to edit.
-// goctl 1.10.1
-
 package health
 
 import (
 	"context"
 	"time"
 
-	"kubeai-model-manager/internal/svc"
-	"kubeai-model-manager/internal/types"
+	"kubeai-api-gateway/internal/svc"
+	"kubeai-api-gateway/internal/types"
 
 	"github.com/zeromicro/go-zero/core/logx"
 )
@@ -28,14 +25,13 @@ func NewHealthLogic(ctx context.Context, svcCtx *svc.ServiceContext) *HealthLogi
 }
 
 // Health 健康检查（liveness）
-// 检查服务进程是否存活，不检查依赖
-func (l *HealthLogic) Health() (resp *types.CommonResp, err error) {
-	resp = &types.CommonResp{
+func (l *HealthLogic) Health() (resp *types.GeneralResponse, err error) {
+	resp = &types.GeneralResponse{
 		Code:    0,
 		Message: "success",
 		Data: map[string]interface{}{
 			"status":    "UP",
-			"service":   "model-manager",
+			"service":   "api-gateway",
 			"timestamp": time.Now().Format(time.RFC3339),
 		},
 	}
@@ -60,15 +56,6 @@ func (l *HealthLogic) CheckDependencies() map[string]interface{} {
 		if err := sqlDB.PingContext(ctx); err != nil {
 			dbStatus = "DOWN"
 			dbMsg = err.Error()
-		} else {
-			// 更新数据库连接指标
-			stats := sqlDB.Stats()
-			result["db_connections"] = map[string]interface{}{
-				"open":      stats.OpenConnections,
-				"in_use":    stats.InUse,
-				"idle":      stats.Idle,
-				"wait_count": stats.WaitCount,
-			}
 		}
 	}
 	result["database"] = map[string]interface{}{
@@ -76,24 +63,30 @@ func (l *HealthLogic) CheckDependencies() map[string]interface{} {
 		"message": dbMsg,
 	}
 
-	// 检查 MinIO 连接
-	minioStatus := "UP"
-	minioMsg := ""
-	if l.svcCtx.MinIOClient != nil {
-		minioCtx, minioCancel := context.WithTimeout(l.ctx, 5*time.Second)
-		defer minioCancel()
-		if err := l.svcCtx.MinIOClient.HealthCheck(minioCtx); err != nil {
-			minioStatus = "DOWN"
-			minioMsg = err.Error()
+	// 检查 Redis 连接
+	redisStatus := "UP"
+	redisMsg := ""
+	if l.svcCtx.RedisClient != nil {
+		redisCtx, redisCancel := context.WithTimeout(l.ctx, 5*time.Second)
+		defer redisCancel()
+		if err := l.svcCtx.RedisClient.Ping(redisCtx); err != nil {
+			redisStatus = "DOWN"
+			redisMsg = err.Error()
 		}
 	} else {
-		minioStatus = "DOWN"
-		minioMsg = "minio client not initialized"
+		redisStatus = "DOWN"
+		redisMsg = "redis client not initialized"
 	}
-	result["minio"] = map[string]interface{}{
-		"status":  minioStatus,
-		"message": minioMsg,
-		"bucket":  l.svcCtx.Config.MinIO.Bucket,
+	result["redis"] = map[string]interface{}{
+		"status":  redisStatus,
+		"message": redisMsg,
+	}
+
+	// 检查下游服务配置
+	result["upstreams"] = map[string]interface{}{
+		"model_manager":     l.svcCtx.Config.Upstreams.ModelManager.URL,
+		"job_scheduler":     l.svcCtx.Config.Upstreams.JobScheduler.URL,
+		"inference_gateway": l.svcCtx.Config.Upstreams.InferenceGateway.URL,
 	}
 
 	return result
