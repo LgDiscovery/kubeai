@@ -78,6 +78,16 @@ type CreateInferenceServiceReq struct {
 	MaxReplicas       int    `json:"max_replicas"`
 }
 
+type UpdateInferenceServiceReq struct {
+	Replicas      int    `json:"replicas,omitempty"`
+	Image         string `json:"image,omitempty"`
+	CPU           string `json:"cpu,omitempty"`
+	Memory        string `json:"memory,omitempty"`
+	GPU           string `json:"gpu,omitempty"`
+	CanaryEnabled *bool  `json:"canary_enabled,omitempty"`
+	CanaryTraffic int    `json:"canary_traffic,omitempty"`
+}
+
 // ========== 任务日志 ==========
 
 type GetTaskLogsReq struct {
