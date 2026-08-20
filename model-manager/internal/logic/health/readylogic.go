@@ -5,6 +5,7 @@ package health
 
 import (
 	"context"
+	"time"
 
 	"kubeai-model-manager/internal/svc"
 	"kubeai-model-manager/internal/types"
@@ -26,10 +27,40 @@ func NewReadyLogic(ctx context.Context, svcCtx *svc.ServiceContext) *ReadyLogic 
 	}
 }
 
+// Ready 就绪检查（readiness）
+// 检查所有依赖是否就绪，只有全部健康时才返回成功
 func (l *ReadyLogic) Ready() (resp *types.CommonResp, err error) {
+	healthLogic := NewHealthLogic(l.ctx, l.svcCtx)
+	deps := healthLogic.CheckDependencies()
+
+	allReady := true
+	for _, dep := range deps {
+		if depMap, ok := dep.(map[string]interface{}); ok {
+			if status, exists := depMap["status"]; exists && status != "UP" {
+				allReady = false
+				break
+			}
+		}
+	}
+
+	status := "READY"
+	code := 0
+	message := "service is ready"
+	if !allReady {
+		status = "NOT_READY"
+		code = 1
+		message = "some dependencies are not ready"
+	}
+
 	resp = &types.CommonResp{
-		Code:    0,
-		Message: "success",
+		Code:    code,
+		Message: message,
+		Data: map[string]interface{}{
+			"status":       status,
+			"service":      "model-manager",
+			"timestamp":    time.Now().Format(time.RFC3339),
+			"dependencies": deps,
+		},
 	}
 	return
 }
