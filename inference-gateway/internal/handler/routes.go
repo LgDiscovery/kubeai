@@ -8,6 +8,8 @@ import (
 
 	health "kubeai-inference-gateway/internal/handler/health"
 	inference "kubeai-inference-gateway/internal/handler/inference"
+	inferenceService "kubeai-inference-gateway/internal/handler/inference_service"
+	taskLog "kubeai-inference-gateway/internal/handler/task_log"
 	"kubeai-inference-gateway/internal/svc"
 
 	"github.com/zeromicro/go-zero/rest"
@@ -63,6 +65,56 @@ func RegisterHandlers(server *rest.Server, serverCtx *svc.ServiceContext) {
 					Method:  http.MethodPost,
 					Path:    "/execute",
 					Handler: inference.InferenceHandler(serverCtx),
+				},
+			}...,
+		),
+		rest.WithPrefix("/api/v1/inference"),
+	)
+
+	// 推理服务管理 API
+	server.AddRoutes(
+		rest.WithMiddlewares(
+			[]rest.Middleware{serverCtx.MetricsMiddleware},
+			[]rest.Route{
+				{
+					Method:  http.MethodGet,
+					Path:    "/services",
+					Handler: inferenceService.ListInferenceServiceHandler(serverCtx),
+				},
+				{
+					Method:  http.MethodPost,
+					Path:    "/services",
+					Handler: inferenceService.CreateInferenceServiceHandler(serverCtx),
+				},
+				{
+					Method:  http.MethodGet,
+					Path:    "/services/:name",
+					Handler: inferenceService.GetInferenceServiceHandler(serverCtx),
+				},
+				{
+					Method:  http.MethodDelete,
+					Path:    "/services/:name",
+					Handler: inferenceService.DeleteInferenceServiceHandler(serverCtx),
+				},
+			}...,
+		),
+		rest.WithPrefix("/api/v1/inference"),
+	)
+
+	// 任务日志 API
+	server.AddRoutes(
+		rest.WithMiddlewares(
+			[]rest.Middleware{serverCtx.MetricsMiddleware},
+			[]rest.Route{
+				{
+					Method:  http.MethodGet,
+					Path:    "/tasks/:task_id/logs",
+					Handler: taskLog.GetTaskLogsHandler(serverCtx),
+				},
+				{
+					Method:  http.MethodGet,
+					Path:    "/tasks/:task_id/pods",
+					Handler: taskLog.ListTaskPodsHandler(serverCtx),
 				},
 			}...,
 		),

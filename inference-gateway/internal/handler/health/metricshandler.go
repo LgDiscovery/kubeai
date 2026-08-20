@@ -6,19 +6,16 @@ package health
 import (
 	"net/http"
 
-	"github.com/zeromicro/go-zero/rest/httpx"
-	"kubeai-inference-gateway/internal/logic/health"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"kubeai-inference-gateway/internal/svc"
 )
 
 func MetricsHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		l := health.NewMetricsLogic(r.Context(), svcCtx)
-		resp, err := l.Metrics()
-		if err != nil {
-			httpx.ErrorCtx(r.Context(), w, err)
+		if svcCtx.Config.Metrics.Enabled {
+			promhttp.Handler().ServeHTTP(w, r)
 		} else {
-			httpx.OkJsonCtx(r.Context(), w, resp)
+			w.WriteHeader(http.StatusNotFound)
 		}
 	}
 }
