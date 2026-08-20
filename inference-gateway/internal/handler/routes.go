@@ -92,6 +92,11 @@ func RegisterHandlers(server *rest.Server, serverCtx *svc.ServiceContext) {
 					Handler: inferenceService.GetInferenceServiceHandler(serverCtx),
 				},
 				{
+					Method:  http.MethodPatch,
+					Path:    "/services/:name",
+					Handler: inferenceService.UpdateInferenceServiceHandler(serverCtx),
+				},
+				{
 					Method:  http.MethodDelete,
 					Path:    "/services/:name",
 					Handler: inferenceService.DeleteInferenceServiceHandler(serverCtx),

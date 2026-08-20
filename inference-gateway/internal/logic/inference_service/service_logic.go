@@ -157,6 +157,97 @@ func (l *DeleteInferenceServiceLogic) DeleteInferenceService(name string) (resp 
 	return
 }
 
+// UpdateInferenceService 更新推理服务（支持扩缩容、镜像更新等）
+type UpdateInferenceServiceLogic struct {
+	logx.Logger
+	ctx    context.Context
+	svcCtx *svc.ServiceContext
+}
+
+func NewUpdateInferenceServiceLogic(ctx context.Context, svcCtx *svc.ServiceContext) *UpdateInferenceServiceLogic {
+	return &UpdateInferenceServiceLogic{
+		Logger: logx.WithContext(ctx),
+		ctx:    ctx,
+		svcCtx: svcCtx,
+	}
+}
+
+func (l *UpdateInferenceServiceLogic) UpdateInferenceService(name string, req *types.UpdateInferenceServiceReq) (resp *types.InferenceServiceDetailResp, err error) {
+	var isvc fiv1.InferenceService
+	if err := l.svcCtx.CtrlClient.Get(l.ctx, client.ObjectKey{
+		Namespace: l.svcCtx.Config.K8s.Namespace,
+		Name:      name,
+	}, &isvc); err != nil {
+		l.Logger.Errorf("Get InferenceService %s failed: %v", name, err)
+		return nil, fmt.Errorf("获取推理服务失败: %w", err)
+	}
+
+	// 更新副本数（扩缩容）
+	if req.Replicas > 0 {
+		replicas := int32(req.Replicas)
+		isvc.Spec.Replicas = &replicas
+	}
+
+	// 更新镜像
+	if req.Image != "" {
+		isvc.Spec.Image = req.Image
+	}
+
+	// 更新资源配置
+	if req.CPU != "" || req.Memory != "" || req.GPU != "" {
+		resources, err := buildResourceRequirements(
+			firstNonEmpty(req.CPU, isvc.Spec.Resources.Requests.Cpu().String()),
+			firstNonEmpty(req.Memory, isvc.Spec.Resources.Requests.Memory().String()),
+			firstNonEmpty(req.GPU, ""),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("资源配置无效: %w", err)
+		}
+		isvc.Spec.Resources = resources
+	}
+
+	// 更新灰度配置
+	if req.CanaryEnabled != nil {
+		if *req.CanaryEnabled && isvc.Spec.Canary == nil {
+			isvc.Spec.Canary = &fiv1.CanarySpec{
+				Enabled:      true,
+				Version:      isvc.Spec.ModelVersion + "-canary",
+				Weight:       int32(req.CanaryTraffic),
+				ModelName:    isvc.Spec.ModelName,
+				ModelVersion: isvc.Spec.ModelVersion,
+			}
+		} else if isvc.Spec.Canary != nil {
+			isvc.Spec.Canary.Enabled = *req.CanaryEnabled
+			if req.CanaryTraffic > 0 {
+				isvc.Spec.Canary.Weight = int32(req.CanaryTraffic)
+			}
+		}
+	}
+
+	if err := l.svcCtx.CtrlClient.Update(l.ctx, &isvc); err != nil {
+		l.Logger.Errorf("Update InferenceService %s failed: %v", name, err)
+		return nil, fmt.Errorf("更新推理服务失败: %w", err)
+	}
+
+	item := convertToItem(&isvc)
+	resp = &types.InferenceServiceDetailResp{
+		Code:    0,
+		Message: "推理服务更新成功",
+		Data:    item,
+	}
+	return
+}
+
+// firstNonEmpty 返回第一个非空字符串
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 // CreateInferenceService 创建推理服务
 type CreateInferenceServiceLogic struct {
 	logx.Logger

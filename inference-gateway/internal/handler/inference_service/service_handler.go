@@ -76,3 +76,26 @@ func DeleteInferenceServiceHandler(svcCtx *svc.ServiceContext) http.HandlerFunc 
 		}
 	}
 }
+
+// UpdateInferenceServiceHandler 更新推理服务（扩缩容、镜像更新等）
+func UpdateInferenceServiceHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		if name == "" {
+			httpx.ErrorCtx(r.Context(), w, errors.New("name is required"))
+			return
+		}
+		var req types.UpdateInferenceServiceReq
+		if err := httpx.Parse(r, &req); err != nil {
+			httpx.ErrorCtx(r.Context(), w, err)
+			return
+		}
+		l := inference_service.NewUpdateInferenceServiceLogic(r.Context(), svcCtx)
+		resp, err := l.UpdateInferenceService(name, &req)
+		if err != nil {
+			httpx.ErrorCtx(r.Context(), w, err)
+		} else {
+			httpx.OkJsonCtx(r.Context(), w, resp)
+		}
+	}
+}
