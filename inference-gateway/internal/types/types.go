@@ -25,3 +25,96 @@ type InferenceResponse struct {
 	TaskID string                 `json:"task_id"`
 	Result map[string]interface{} `json:"result"`
 }
+
+// ========== 推理服务管理 ==========
+
+type InferenceServiceItem struct {
+	Name          string `json:"name"`
+	ModelName     string `json:"model_name"`
+	ModelVersion  string `json:"model_version"`
+	Image         string `json:"image"`
+	Replicas      int32  `json:"replicas"`
+	ReadyReplicas int32  `json:"ready_replicas"`
+	Status        string `json:"status"`
+	CPU           string `json:"cpu"`
+	Memory        string `json:"memory"`
+	GPU           string `json:"gpu"`
+	URL           string `json:"url"`
+	CanaryEnabled bool   `json:"canary_enabled"`
+	CanaryTraffic int32  `json:"canary_traffic"`
+	CreatedAt     string `json:"created_at"`
+}
+
+type InferenceServiceListData struct {
+	Total int                   `json:"total"`
+	Items []InferenceServiceItem `json:"items"`
+}
+
+type InferenceServiceListResp struct {
+	Code    int                     `json:"code"`
+	Message string                  `json:"message"`
+	Data    InferenceServiceListData `json:"data"`
+}
+
+type InferenceServiceDetailResp struct {
+	Code    int                   `json:"code"`
+	Message string                `json:"message"`
+	Data    InferenceServiceItem  `json:"data"`
+}
+
+type CreateInferenceServiceReq struct {
+	Name              string `json:"name"`
+	ModelName         string `json:"model_name"`
+	ModelVersion      string `json:"model_version"`
+	Image             string `json:"image"`
+	Replicas          int    `json:"replicas"`
+	Port              int    `json:"port"`
+	CPU               string `json:"cpu"`
+	Memory            string `json:"memory"`
+	GPU               string `json:"gpu"`
+	CanaryEnabled     bool   `json:"canary_enabled"`
+	CanaryTraffic     int    `json:"canary_traffic"`
+	EnableAutoscaling bool   `json:"enable_autoscaling"`
+	MaxReplicas       int    `json:"max_replicas"`
+}
+
+// ========== 任务日志 ==========
+
+type GetTaskLogsReq struct {
+	TaskID    string `json:"task_id"`
+	Container string `json:"container,optional"`
+	TailLines int    `json:"tail_lines,optional"`
+	SinceTime string `json:"since_time,optional"`
+}
+
+type TaskLogsData struct {
+	TaskID    string   `json:"task_id"`
+	PodName   string   `json:"pod_name"`
+	Logs      []string `json:"logs"`
+	Timestamp string   `json:"timestamp"`
+}
+
+type TaskLogsResp struct {
+	Code    int          `json:"code"`
+	Message string       `json:"message"`
+	Data    TaskLogsData `json:"data"`
+}
+
+type TaskPodItem struct {
+	Name      string `json:"name"`
+	Status    string `json:"status"`
+	NodeName  string `json:"node_name"`
+	CreatedAt string `json:"created_at"`
+}
+
+type TaskPodsData struct {
+	TaskID string        `json:"task_id"`
+	Pods   []TaskPodItem `json:"pods"`
+	Total  int           `json:"total"`
+}
+
+type TaskPodsResp struct {
+	Code    int          `json:"code"`
+	Message string       `json:"message"`
+	Data    TaskPodsData `json:"data"`
+}
